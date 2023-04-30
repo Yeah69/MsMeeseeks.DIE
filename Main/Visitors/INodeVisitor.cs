@@ -1,11 +1,9 @@
 using MrMeeseeks.Visitor;
 using MsMeeseeks.DIE.Nodes;
-using MsMeeseeks.DIE.Visitors;
-
-[assembly:VisitorInterfacePair(typeof(INodeVisitor), typeof(INode))]
 
 namespace MsMeeseeks.DIE.Visitors;
 
+[VisitorInterface(typeof(INode))]
 internal partial interface INodeVisitor
 {
 }

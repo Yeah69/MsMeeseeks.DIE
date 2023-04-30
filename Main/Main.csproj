@@ -32,7 +32,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="MrMeeseeks.Visitor" Version="1.0.0" PrivateAssets="all" GeneratePathProperty="true" />
+    <PackageReference Include="MrMeeseeks.Visitor" Version="1.1.0" PrivateAssets="all" GeneratePathProperty="true" />
     
     <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 

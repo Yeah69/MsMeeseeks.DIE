@@ -5,8 +5,10 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
+using MsMeeseeks.DIE.Analytics;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
+using MsMeeseeks.DIE.Nodes;
 using MsMeeseeks.DIE.Nodes.Ranges;
 using MsMeeseeks.DIE.Validation.Range;
 using MsMeeseeks.DIE.Visitors;
@@ -28,6 +30,9 @@ internal class ExecuteContainer : IExecuteContainer
     private readonly IContainerDieExceptionGenerator _containerDieExceptionGenerator;
     private readonly ICurrentExecutionPhaseSetter _currentExecutionPhaseSetter;
     private readonly ILocalDiagLogger _localDiagLogger;
+    private readonly IAnalyticsFlags _analyticsFlags;
+    private readonly Func<IImmutableSet<INode>?, IResolutionGraphAnalyticsNodeVisitor> _resolutionGraphAnalyticsNodeVisitorFactory;
+    private readonly Lazy<IFilterForErrorRelevancyNodeVisitor> _filterForErrorRelevancyNodeVisitor;
     private readonly IDiagLogger _diagLogger;
     private readonly IContainerInfo _containerInfo;
 
@@ -41,6 +46,9 @@ internal class ExecuteContainer : IExecuteContainer
         IContainerInfoContext containerInfoContext,
         ICurrentExecutionPhaseSetter currentExecutionPhaseSetter,
         ILocalDiagLogger localDiagLogger,
+        IAnalyticsFlags analyticsFlags,
+        Func<IImmutableSet<INode>?, IResolutionGraphAnalyticsNodeVisitor> resolutionGraphAnalyticsNodeVisitorFactory,
+        Lazy<IFilterForErrorRelevancyNodeVisitor> filterForErrorRelevancyNodeVisitor,
         IDiagLogger diagLogger)
     {
         _errorDescriptionInsteadOfBuildFailure = generatorConfiguration.ErrorDescriptionInsteadOfBuildFailure;
@@ -51,6 +59,9 @@ internal class ExecuteContainer : IExecuteContainer
         _containerDieExceptionGenerator = containerDieExceptionGenerator;
         _currentExecutionPhaseSetter = currentExecutionPhaseSetter;
         _localDiagLogger = localDiagLogger;
+        _analyticsFlags = analyticsFlags;
+        _resolutionGraphAnalyticsNodeVisitorFactory = resolutionGraphAnalyticsNodeVisitorFactory;
+        _filterForErrorRelevancyNodeVisitor = filterForErrorRelevancyNodeVisitor;
         _diagLogger = diagLogger;
         _containerInfo = containerInfoContext.ContainerInfo;
     }
@@ -65,7 +76,7 @@ internal class ExecuteContainer : IExecuteContainer
 
             if (_diagLogger.ErrorsIssued)
             {
-                ErrorExit(null);
+                ErrorExit(null, null);
                 return;
             }
             
@@ -74,7 +85,7 @@ internal class ExecuteContainer : IExecuteContainer
 
             if (_diagLogger.ErrorsIssued)
             {
-                ErrorExit(null);
+                ErrorExit(null, _containerNode);
                 return;
             }
 
@@ -83,7 +94,7 @@ internal class ExecuteContainer : IExecuteContainer
 
             if (_diagLogger.ErrorsIssued)
             {
-                ErrorExit(null);
+                ErrorExit(null, _containerNode);
                 return;
             }
 
@@ -95,23 +106,36 @@ internal class ExecuteContainer : IExecuteContainer
                 .GetText();
 
             _context.AddSource($"{_containerInfo.Namespace}.{_containerInfo.Name}.g.cs", containerSource);
+                
+            _currentExecutionPhaseSetter.Value = ExecutionPhase.Analytics;
+            if (_analyticsFlags.ResolutionGraph)
+                _resolutionGraphAnalyticsNodeVisitorFactory(null).VisitIContainerNode(_containerNode);
         }
         catch (DieException dieException)
         {
-            ErrorExit(dieException);
+            ErrorExit(dieException, _containerNode);
         }
         catch (Exception exception)
         {
             _localDiagLogger.Error(
                 ErrorLogData.UnexpectedException(exception), 
                 _containerInfo.ContainerType.Locations.FirstOrDefault() ?? Location.None);
-            ErrorExit(exception);
+            ErrorExit(exception, _containerNode);
         }
 
-        void ErrorExit(Exception? exception)
+        void ErrorExit(
+            Exception? exception,
+            IContainerNode? containerNode)
         {
             if (_errorDescriptionInsteadOfBuildFailure)
                 _containerDieExceptionGenerator.Generate(exception);
+
+            if (_analyticsFlags.ErrorFilteredResolutionGraph && containerNode is not null)
+            {
+                _filterForErrorRelevancyNodeVisitor.Value.VisitIContainerNode(containerNode);
+                _resolutionGraphAnalyticsNodeVisitorFactory(_filterForErrorRelevancyNodeVisitor.Value.ErrorRelevantNodes)
+                    .VisitIContainerNode(containerNode);
+            }
         }
     }
 }
