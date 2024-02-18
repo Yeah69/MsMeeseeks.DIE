@@ -1,5 +1,3 @@
-using Microsoft.CodeAnalysis;
-
 namespace MsMeeseeks.DIE.Validation.Attributes;
 
 internal interface IValidateAttributes
@@ -8,7 +6,7 @@ internal interface IValidateAttributes
     bool ValidateImplementation(INamedTypeSymbol type);
 }
 
-internal class ValidateAttributes : IValidateAttributes
+internal sealed class ValidateAttributes : IValidateAttributes
 {
     public bool ValidateAbstraction(INamedTypeSymbol type) => 
         type.TypeKind == TypeKind.Interface || type.IsReferenceType;

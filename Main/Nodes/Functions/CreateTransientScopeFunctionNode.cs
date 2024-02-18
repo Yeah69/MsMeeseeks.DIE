@@ -1,14 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Elements;
 using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
 using MsMeeseeks.DIE.Nodes.Mappers;
 using MsMeeseeks.DIE.Nodes.Ranges;
+using MsMeeseeks.DIE.Utility;
+using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
@@ -16,7 +13,7 @@ internal interface ICreateTransientScopeFunctionNode : ICreateFunctionNodeBase
 {
 }
 
-internal partial class CreateTransientScopeFunctionNode : SingleFunctionNodeBase, ICreateTransientScopeFunctionNode, IScopeInstance
+internal sealed partial class CreateTransientScopeFunctionNode : SingleFunctionNodeBase, ICreateTransientScopeFunctionNode, IScopeInstance
 {
     private readonly INamedTypeSymbol _typeSymbol;
     private readonly Func<IElementNodeMapper> _typeToElementNodeMapperFactory;
@@ -33,11 +30,12 @@ internal partial class CreateTransientScopeFunctionNode : SingleFunctionNodeBase
         IReferenceGenerator referenceGenerator, 
         Func<IElementNodeMapper> typeToElementNodeMapperFactory,
         Func<IElementNodeMapperBase, ITransientScopeDisposalElementNodeMapper> transientScopeDisposalElementNodeMapperFactory,
-        Func<string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<(string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
-        Func<string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
+        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
+        ITypeParameterUtility typeParameterUtility,
         IContainerWideContext containerWideContext) 
         : base(
             Microsoft.CodeAnalysis.Accessibility.Internal,
@@ -51,16 +49,21 @@ internal partial class CreateTransientScopeFunctionNode : SingleFunctionNodeBase
             asyncFunctionCallNodeFactory,
             scopeCallNodeFactory,
             transientScopeCallNodeFactory,
+            typeParameterUtility,
             containerWideContext)
     {
         _typeSymbol = typeSymbol;
         _typeToElementNodeMapperFactory = typeToElementNodeMapperFactory;
         _transientScopeDisposalElementNodeMapperFactory = transientScopeDisposalElementNodeMapperFactory;
-        Name = referenceGenerator.Generate("Create", typeSymbol);
+        Name = referenceGenerator.Generate("Create", _typeSymbol);
     }
 
     protected override IElementNode MapToReturnedElement(IElementNodeMapperBase mapper) => 
-        mapper.MapToImplementation(new(false, false, false), null, _typeSymbol, ImmutableStack<INamedTypeSymbol>.Empty);
+        mapper.MapToImplementation(
+            new(false, false, false), 
+            null, 
+            _typeSymbol, 
+            new(ImmutableStack<INamedTypeSymbol>.Empty, null));
 
     protected override IElementNodeMapperBase GetMapper()
     {

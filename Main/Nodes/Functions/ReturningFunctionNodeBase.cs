@@ -1,21 +1,22 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Nodes.Elements;
 using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
 using MsMeeseeks.DIE.Nodes.Ranges;
+using MsMeeseeks.DIE.Utility;
+using MrMeeseeks.SourceGeneratorUtility;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
-internal abstract class ReturningFunctionNodeBase : FunctionNodeBase
+internal interface IReturningFunctionNode : IFunctionNode
+{
+}
+
+internal abstract class ReturningFunctionNodeBase : FunctionNodeBase, IReturningFunctionNode
 {
     protected readonly ITypeSymbol TypeSymbol;
 
-    public ReturningFunctionNodeBase(
+    protected ReturningFunctionNodeBase(
         // parameters
         Accessibility? accessibility,
         ITypeSymbol typeSymbol,
@@ -26,10 +27,11 @@ internal abstract class ReturningFunctionNodeBase : FunctionNodeBase
         
         // dependencies
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
-        Func<string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<(string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
-        Func<string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
+        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        ITypeParameterUtility typeParameterUtility,
         IContainerWideContext containerWideContext)
         : base(
             accessibility,
@@ -46,13 +48,24 @@ internal abstract class ReturningFunctionNodeBase : FunctionNodeBase
             containerWideContext)
     {
         TypeSymbol = typeSymbol;
-        ReturnedTypeFullName = typeSymbol.FullName();
+        ReturnedTypeFullName = TypeSymbol.FullName();
+        TypeParameters = typeParameterUtility.ExtractTypeParameters(typeSymbol);
     }
 
-    protected override string GetAsyncTypeFullName() => TypeSymbol.FullName();
+    protected override string GetAsyncTypeFullName() => TypeSymbol is INamedTypeSymbol namedTypeSymbol
+        ? namedTypeSymbol.OriginalDefinitionIfUnbound().FullName() 
+        : TypeSymbol.FullName();
 
-    protected override string GetReturnedTypeFullName() => WellKnownTypes.ValueTask1.Construct(TypeSymbol).FullName();
+    protected override string GetReturnedTypeFullName()
+    {
+        var symbol = TypeSymbol is INamedTypeSymbol namedTypeSymbol
+            ? namedTypeSymbol.OriginalDefinitionIfUnbound()
+            : TypeSymbol;
+        return WellKnownTypes.ValueTask1.Construct(symbol).FullName();
+    }
 
     public override bool CheckIfReturnedType(ITypeSymbol type) => 
         CustomSymbolEqualityComparer.IncludeNullability.Equals(type, TypeSymbol);
+
+    public override IReadOnlyList<ITypeParameterSymbol> TypeParameters { get; }
 }

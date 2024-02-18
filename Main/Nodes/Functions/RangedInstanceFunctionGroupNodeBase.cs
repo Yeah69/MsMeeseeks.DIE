@@ -1,8 +1,6 @@
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Visitors;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
@@ -30,14 +28,12 @@ internal abstract class RangedInstanceFunctionGroupNodeBase : IRangedInstanceFun
         TypeFullName = type.FullName();
         var label = Level.ToString();
         FieldReference =
-            referenceGenerator.Generate($"_{label.ToLower()}InstanceField", type);
-        LockReference = referenceGenerator.Generate($"_{label.ToLower()}InstanceLock");
+            referenceGenerator.Generate($"_{label.ToLowerInvariant()}InstanceField", type);
+        LockReference = referenceGenerator.Generate($"_{label.ToLowerInvariant()}InstanceLock");
         IsCreatedForStructs = type.IsValueType ? referenceGenerator.Generate("isCreated") : null;
     }
 
-    public void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
-    {
-    }
+    public void Build(PassedContext passedContext) { }
 
     public abstract void Accept(INodeVisitor nodeVisitor);
 

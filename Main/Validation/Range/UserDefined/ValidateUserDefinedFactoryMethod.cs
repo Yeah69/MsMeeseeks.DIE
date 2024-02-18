@@ -1,5 +1,3 @@
-using System.Linq;
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Logging;
 
 namespace MsMeeseeks.DIE.Validation.Range.UserDefined;
@@ -9,7 +7,7 @@ internal interface IValidateUserDefinedFactoryMethod : IValidateUserDefinedMetho
     
 }
 
-internal class ValidateUserDefinedFactoryMethod : ValidateUserDefinedMethod, IValidateUserDefinedFactoryMethod
+internal sealed class ValidateUserDefinedFactoryMethod : ValidateUserDefinedMethod, IValidateUserDefinedFactoryMethod
 {
     internal ValidateUserDefinedFactoryMethod(
         ILocalDiagLogger localDiagLogger) 

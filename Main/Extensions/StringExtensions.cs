@@ -1,5 +1,3 @@
-using System.Collections.Immutable;
-
 namespace MsMeeseeks.DIE.Extensions;
 
 internal static class StringExtensions

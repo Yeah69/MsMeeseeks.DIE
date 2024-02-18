@@ -37,7 +37,7 @@
   
   <!-- Specific Package -->
   <PropertyGroup>
-    <PackageTags>MrMeeseeks DI SourceGenerator</PackageTags>
+    <PackageTags>MsMeeseeks DI SourceGenerator</PackageTags>
     <PackageReleaseNotes>-/-</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/Yeah69/MsMeeseeks.DIE</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Yeah69/MsMeeseeks.DIE</RepositoryUrl>

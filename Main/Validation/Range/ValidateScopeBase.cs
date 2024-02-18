@@ -1,12 +1,10 @@
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
+using MsMeeseeks.DIE.Utility;
 using MsMeeseeks.DIE.Validation.Attributes;
 using MsMeeseeks.DIE.Validation.Range.UserDefined;
+using MrMeeseeks.SourceGeneratorUtility;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Validation.Range;
 
@@ -29,7 +27,8 @@ internal abstract class ValidateScopeBase : ValidateRange, IValidateScopeBase
         IValidateUserDefinedFactoryField validateUserDefinedFactoryField,
         IValidateAttributes validateAttributes,
         IContainerWideContext containerWideContext,
-        ILocalDiagLogger localDiagLogger) 
+        ILocalDiagLogger localDiagLogger,
+        IRangeUtility rangeUtility) 
         : base(
             validateUserDefinedAddForDisposalSync, 
             validateUserDefinedAddForDisposalAsync,
@@ -40,7 +39,8 @@ internal abstract class ValidateScopeBase : ValidateRange, IValidateScopeBase
             validateUserDefinedFactoryField,
             validateAttributes,
             containerWideContext,
-            localDiagLogger)
+            localDiagLogger,
+            rangeUtility)
     {
         _wellKnownTypesMiscellaneous = containerWideContext.WellKnownTypesMiscellaneous;
 
@@ -80,7 +80,7 @@ internal abstract class ValidateScopeBase : ValidateRange, IValidateScopeBase
                 ValidationErrorDiagnostic(rangeType, containerType, "Has to be declared private."),
                 rangeType.Locations.FirstOrDefault() ?? Location.None);
         
-        if (rangeType.Name != DefaultScopeName && !rangeType.Name.StartsWith(CustomScopeName))
+        if (rangeType.Name != DefaultScopeName && !rangeType.Name.StartsWith(CustomScopeName, StringComparison.Ordinal))
             LocalDiagLogger.Error(
                 ValidationErrorDiagnostic(rangeType, containerType, $"{ScopeName}'s name hast to be either \"{DefaultScopeName}\" if it is the default {ScopeName} or start with \"{CustomScopeName}\" if it is a custom {ScopeName}."),
                 rangeType.Locations.FirstOrDefault() ?? Location.None);
@@ -96,7 +96,7 @@ internal abstract class ValidateScopeBase : ValidateRange, IValidateScopeBase
                 rangeType.Locations.FirstOrDefault() ?? Location.None);
 
         var isDefault = rangeType.Name == DefaultScopeName;
-        var isCustom = rangeType.Name.StartsWith(CustomScopeName);
+        var isCustom = rangeType.Name.StartsWith(CustomScopeName, StringComparison.Ordinal);
 
         if (isDefault)
         {

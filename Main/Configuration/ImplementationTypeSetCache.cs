@@ -1,12 +1,7 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
+using MsMeeseeks.DIE.MsContainer;
 using MrMeeseeks.SourceGeneratorUtility;
 using MrMeeseeks.SourceGeneratorUtility.Extensions;
-using MsMeeseeks.DIE.MsContainer;
-using MsMeeseeks.DIE.Utility;
+using ICheckInternalsVisible = MrMeeseeks.SourceGeneratorUtility.ICheckInternalsVisible;
 
 namespace MsMeeseeks.DIE.Configuration;
 
@@ -17,7 +12,7 @@ internal interface IImplementationTypeSetCache
     IImmutableSet<INamedTypeSymbol> ForAssembly(IAssemblySymbol assembly);
 }
 
-internal class ImplementationTypeSetCache : IImplementationTypeSetCache, IContainerInstance
+internal sealed class ImplementationTypeSetCache : IImplementationTypeSetCache, IContainerInstance
 {
     private readonly ICheckInternalsVisible _checkInternalsVisible;
     private readonly Lazy<IImmutableSet<INamedTypeSymbol>> _all;
@@ -49,7 +44,7 @@ internal class ImplementationTypeSetCache : IImplementationTypeSetCache, IContai
         return freshSet;
     }
 
-    private IImmutableSet<INamedTypeSymbol> GetImplementationsFrom(IAssemblySymbol assemblySymbol)
+    private ImmutableHashSet<INamedTypeSymbol> GetImplementationsFrom(IAssemblySymbol assemblySymbol)
     {
         var internalsAreVisible = _checkInternalsVisible.Check(assemblySymbol);
                 
@@ -66,7 +61,7 @@ internal class ImplementationTypeSetCache : IImplementationTypeSetCache, IContai
                 DeclaredAccessibility: Accessibility.Public or Accessibility.Internal or Accessibility.ProtectedOrInternal
             })
             .Where(nts => 
-                !nts.Name.StartsWith("<") 
+                !nts.Name.StartsWith("<", StringComparison.Ordinal) 
                 && (nts.IsAccessiblePublicly() 
                     || internalsAreVisible && nts.IsAccessibleInternally()))
             .ToImmutableHashSet<INamedTypeSymbol>(CustomSymbolEqualityComparer.Default);

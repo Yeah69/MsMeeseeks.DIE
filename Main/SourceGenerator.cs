@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using MsMeeseeks.DIE.Contexts;
+using MsMeeseeks.DIE.Utility;
 
 namespace MsMeeseeks.DIE;
 
@@ -7,28 +8,31 @@ public class SourceGenerator : ISourceGenerator
 {
     public void Initialize(GeneratorInitializationContext context)
     {
-        new InitializeImpl(context, SyntaxReceiverFactory).Initialize();
-            
-        ISyntaxReceiver SyntaxReceiverFactory() => new SyntaxReceiver();
-        //if (!Debugger.IsAttached)
-        {
-            //Debugger.Launch();
-        }
+        // no initialization required
     }
 
     public void Execute(GeneratorExecutionContext context)
     {
         try
         {
-            WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous = WellKnownTypesMiscellaneous.Create(context.Compilation);
+            var wellKnownTypesMiscellaneous = WellKnownTypesMiscellaneous.Create(context.Compilation);
+            var rangeUtility = new RangeUtility(
+                new ContainerWideContext(
+                    WellKnownTypes.Create(context.Compilation),
+                    WellKnownTypesAggregation.Create(context.Compilation),
+                    WellKnownTypesChoice.Create(context.Compilation),
+                    WellKnownTypesCollections.Create(context.Compilation), 
+                    wellKnownTypesMiscellaneous,
+                    context.Compilation));
         
-            new ExecuteImpl(
+            var execute = new ExecuteImpl(
                 context,
-                wellKnownTypesMiscellaneous,
-                ContainerInfoFactory)
-                .Execute();
+                rangeUtility,
+                ContainerInfoFactory);
+            execute.Execute();
                 
-            IContainerInfo ContainerInfoFactory(INamedTypeSymbol type) => new ContainerInfo(type, wellKnownTypesMiscellaneous);
+            IContainerInfo ContainerInfoFactory(INamedTypeSymbol type) => 
+                new ContainerInfo(type, wellKnownTypesMiscellaneous, rangeUtility);
         }
         catch (ValidationDieException)
         {

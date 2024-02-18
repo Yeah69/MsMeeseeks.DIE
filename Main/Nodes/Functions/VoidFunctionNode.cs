@@ -1,16 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Elements;
 using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
 using MsMeeseeks.DIE.Nodes.Ranges;
+using MrMeeseeks.SourceGeneratorUtility;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
@@ -20,7 +15,7 @@ internal interface IVoidFunctionNode : IFunctionNode
     void ReorderOrDetectCycle();
 }
 
-internal partial class VoidFunctionNode : FunctionNodeBase, IVoidFunctionNode, IScopeInstance
+internal sealed partial class VoidFunctionNode : FunctionNodeBase, IVoidFunctionNode, IScopeInstance
 {
     private readonly IReadOnlyList<IInitializedInstanceNode> _initializedInstanceNodes;
     private readonly ILocalDiagLogger _localDiagLogger;
@@ -37,10 +32,10 @@ internal partial class VoidFunctionNode : FunctionNodeBase, IVoidFunctionNode, I
         IReferenceGenerator referenceGenerator,
         ILocalDiagLogger localDiagLogger,
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
-        Func<string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<(string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
-        Func<string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
+        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
         IContainerWideContext containerWideContext)
         : base(
             Microsoft.CodeAnalysis.Accessibility.Internal, 
@@ -62,9 +57,9 @@ internal partial class VoidFunctionNode : FunctionNodeBase, IVoidFunctionNode, I
         Name = referenceGenerator.Generate("Initialize");
     }
     
-    public override void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
+    public override void Build(PassedContext passedContext)
     {
-        base.Build(implementationStack);
+        base.Build(passedContext);
         Initializations = _initializedInstanceNodes
             .Select(i => (i.BuildCall(_parentRange, this), i))
             .ToList();
@@ -132,7 +127,7 @@ internal partial class VoidFunctionNode : FunctionNodeBase, IVoidFunctionNode, I
             HashSet<IInitializedInstanceNode> cf = new();
             Stack<IInitializedInstanceNode> s = new();
 
-            while (roots.Any() && roots.Dequeue() is {} next)
+            while (roots.Count != 0 && roots.Dequeue() is {} next)
                 DetectCycleInner(
                     next, 
                     v, 
@@ -155,7 +150,7 @@ internal partial class VoidFunctionNode : FunctionNodeBase, IVoidFunctionNode, I
                     {
                         i = stack.Pop();
                         cycleStack = cycleStack.Push(i.TypeFullName);
-                    } while (i != current && stack.Any());
+                    } while (i != current && stack.Count != 0);
                     
                     _localDiagLogger.Error(
                         ErrorLogData.CircularReferenceAmongInitializedInstances(cycleStack),

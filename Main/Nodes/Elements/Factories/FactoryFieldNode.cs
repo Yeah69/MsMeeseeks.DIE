@@ -1,4 +1,3 @@
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Nodes.Functions;
 
@@ -8,7 +7,7 @@ internal interface IFactoryFieldNode : IFactoryNodeBase
 {
 }
 
-internal partial class FactoryFieldNode : FactoryNodeBase,  IFactoryFieldNode
+internal sealed partial class FactoryFieldNode : FactoryNodeBase,  IFactoryFieldNode
 {
     internal FactoryFieldNode(
         IFieldSymbol fieldSymbol, 

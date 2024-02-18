@@ -1,5 +1,3 @@
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Logging;
 
 namespace MsMeeseeks.DIE.Nodes.Elements;
@@ -9,7 +7,7 @@ internal interface IErrorNode : IElementNode
     string Message { get; }
 }
 
-internal partial class ErrorNode : IErrorNode
+internal sealed partial class ErrorNode : IErrorNode
 {
     private readonly ITypeSymbol _currentType;
     private readonly ILocalDiagLogger _localDiagLogger;
@@ -24,9 +22,9 @@ internal partial class ErrorNode : IErrorNode
         Message = message;
     }
     
-    public void Build(ImmutableStack<INamedTypeSymbol> implementationStack) =>
+    public void Build(PassedContext passedContext) =>
         _localDiagLogger.Error(
-            ErrorLogData.ResolutionException(Message, _currentType, implementationStack),
+            ErrorLogData.ResolutionException(Message, _currentType, passedContext.ImplementationStack),
             Location.None);
 
     public string Message { get; }

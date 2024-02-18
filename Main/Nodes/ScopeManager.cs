@@ -1,15 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
 using System.Threading;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Extensions;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Ranges;
 using MsMeeseeks.DIE.Nodes.Roots;
+using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Nodes;
 
@@ -21,7 +16,7 @@ internal interface IScopeManager
     IEnumerable<ITransientScopeNode> TransientScopes { get; }
 }
 
-internal class ScopeManager : IScopeManager, IContainerInstance
+internal sealed class ScopeManager : IScopeManager, IContainerInstance
 {
     private readonly IContainerNode _container;
     private readonly ITransientScopeInterfaceNode _transientScopeInterface;
@@ -30,10 +25,10 @@ internal class ScopeManager : IScopeManager, IContainerInstance
     private readonly Func<string, INamedTypeSymbol?, ITransientScopeNodeRoot> _transientScopeFactory;
     private readonly Lazy<IScopeNode> _defaultScope;
     private readonly Lazy<ITransientScopeNode> _defaultTransientScope;
-    private readonly IDictionary<INamedTypeSymbol, IScopeNode> _customScopes;
-    private readonly IDictionary<INamedTypeSymbol, ITransientScopeNode> _customTransientScopes;
-    private readonly IReadOnlyDictionary<INamedTypeSymbol, INamedTypeSymbol> _transientScopeRootTypeToScopeType;
-    private readonly IReadOnlyDictionary<INamedTypeSymbol, INamedTypeSymbol> _scopeRootTypeToScopeType;
+    private readonly Dictionary<INamedTypeSymbol, IScopeNode> _customScopes;
+    private readonly Dictionary<INamedTypeSymbol, ITransientScopeNode> _customTransientScopes;
+    private readonly Dictionary<INamedTypeSymbol, INamedTypeSymbol> _transientScopeRootTypeToScopeType;
+    private readonly Dictionary<INamedTypeSymbol, INamedTypeSymbol> _scopeRootTypeToScopeType;
 
     public ScopeManager(
         IContainerInfoContext containerInfoContext,
@@ -54,7 +49,7 @@ internal class ScopeManager : IScopeManager, IContainerInstance
                 var defaultScopeType = containerInfo.ContainerType.GetTypeMembers(Constants.DefaultScopeName).FirstOrDefault();
                 return scopeFactory(Constants.DefaultScopeName, defaultScopeType)
                     .Scope
-                    .EnqueueBuildJobTo(container.BuildQueue, ImmutableStack<INamedTypeSymbol>.Empty);
+                    .EnqueueBuildJobTo(container.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null));
             },
             LazyThreadSafetyMode.ExecutionAndPublication);
         _defaultTransientScope = new Lazy<ITransientScopeNode>(
@@ -63,7 +58,7 @@ internal class ScopeManager : IScopeManager, IContainerInstance
                 var defaultTransientScopeType = containerInfo.ContainerType.GetTypeMembers(Constants.DefaultTransientScopeName).FirstOrDefault();
                 var ret = transientScopeFactory(Constants.DefaultTransientScopeName, defaultTransientScopeType)
                     .TransientScope
-                    .EnqueueBuildJobTo(container.BuildQueue, ImmutableStack<INamedTypeSymbol>.Empty);
+                    .EnqueueBuildJobTo(container.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null));
                 _transientScopeInterface.RegisterRange(ret);
                 return ret;
             },
@@ -74,7 +69,7 @@ internal class ScopeManager : IScopeManager, IContainerInstance
         _transientScopeRootTypeToScopeType = containerInfo
             .ContainerType
             .GetTypeMembers()
-            .Where(nts => nts.Name.StartsWith(Constants.CustomTransientScopeName))
+            .Where(nts => nts.Name.StartsWith(Constants.CustomTransientScopeName, StringComparison.Ordinal))
             .SelectMany(nts => nts.GetAttributes()
                 .Where(ad =>
                     CustomSymbolEqualityComparer.Default.Equals(ad.AttributeClass,
@@ -100,7 +95,7 @@ internal class ScopeManager : IScopeManager, IContainerInstance
         _scopeRootTypeToScopeType = containerInfo
             .ContainerType
             .GetTypeMembers()
-            .Where(nts => nts.Name.StartsWith(Constants.CustomScopeName))
+            .Where(nts => nts.Name.StartsWith(Constants.CustomScopeName, StringComparison.Ordinal))
             .SelectMany(nts => nts.GetAttributes()
                 .Where(ad =>
                     CustomSymbolEqualityComparer.Default.Equals(ad.AttributeClass,
@@ -134,7 +129,7 @@ internal class ScopeManager : IScopeManager, IContainerInstance
         
         var ret = _scopeFactory(scopeType.Name, scopeType)
             .Scope
-            .EnqueueBuildJobTo(_container.BuildQueue, ImmutableStack<INamedTypeSymbol>.Empty);
+            .EnqueueBuildJobTo(_container.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null));
         _customScopes[scopeRootType] = ret;
         return ret;
     }
@@ -149,7 +144,7 @@ internal class ScopeManager : IScopeManager, IContainerInstance
         
         var ret = _transientScopeFactory(transientScopeType.Name, transientScopeType)
             .TransientScope
-            .EnqueueBuildJobTo(_container.BuildQueue, ImmutableStack<INamedTypeSymbol>.Empty);
+            .EnqueueBuildJobTo(_container.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null));
         _customTransientScopes[transientScopeRootType] = ret;
          _transientScopeInterface.RegisterRange(ret);
         return ret;

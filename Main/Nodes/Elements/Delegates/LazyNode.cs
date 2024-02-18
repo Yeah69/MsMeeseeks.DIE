@@ -1,4 +1,3 @@
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Logging;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
@@ -9,16 +8,17 @@ internal interface ILazyNode : IDelegateBaseNode
 {
 }
 
-internal partial class LazyNode : DelegateBaseNode, ILazyNode
+internal sealed partial class LazyNode : DelegateBaseNode, ILazyNode
 {
     internal LazyNode(
-        INamedTypeSymbol lazyType,
+        (INamedTypeSymbol Outer, INamedTypeSymbol Inner) delegateTypes,
         ILocalFunctionNode function,
+        IReadOnlyList<ITypeSymbol> typeParameters,
         
         ILocalDiagLogger localDiagLogger,
         IContainerNode parentContainer,
         IReferenceGenerator referenceGenerator) 
-        : base(lazyType, function, localDiagLogger, parentContainer, referenceGenerator)
+        : base(delegateTypes, function, typeParameters, localDiagLogger, parentContainer, referenceGenerator)
     {
     }
 }

@@ -1,9 +1,4 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Nodes;
@@ -23,7 +18,7 @@ internal interface IResolutionGraphAnalyticsNodeVisitor : INodeVisitor
     
 }
 
-internal class ResolutionGraphAnalyticsNodeVisitor : IResolutionGraphAnalyticsNodeVisitor
+internal sealed class ResolutionGraphAnalyticsNodeVisitor : IResolutionGraphAnalyticsNodeVisitor
 {
     private readonly IImmutableSet<INode>? _relevantNodes;
     private readonly IPaths _paths;
@@ -65,7 +60,9 @@ internal class ResolutionGraphAnalyticsNodeVisitor : IResolutionGraphAnalyticsNo
     public void VisitICreateTransientScopeFunctionNode(ICreateTransientScopeFunctionNode element) =>
         VisitISingleFunctionNode(element);
 
-    public void VisitIMultiFunctionNode(IMultiFunctionNode element)
+    public void VisitIMultiFunctionNode(IMultiFunctionNode element) => VisitIMultiFunctionNodeBase(element);
+
+    public void VisitIMultiFunctionNodeBase(IMultiFunctionNodeBase element)
     {
         if (_relevantNodes is not null && !_relevantNodes.Contains(element))
             return;
@@ -77,8 +74,8 @@ internal class ResolutionGraphAnalyticsNodeVisitor : IResolutionGraphAnalyticsNo
         var reference = GetOrAddReference(element);
         _currentReference = reference;
         _code.AppendLine($$"""
-package "{{element.ReturnedTypeFullName}} {{element.Name}}({{string.Join(", ", element.Parameters.Select(p => $"{p.Node.TypeFullName}"))}})" as {{reference}} {
-""");
+                           package "{{element.ReturnedTypeFullName}} {{element.Name}}({{string.Join(", ", element.Parameters.Select(p => $"{p.Node.TypeFullName}"))}})" as {{reference}} {
+                           """);
 
         foreach (var returnedElement in element.ReturnedElements)
             VisitIElementNode(returnedElement);
@@ -87,8 +84,8 @@ package "{{element.ReturnedTypeFullName}} {{element.Name}}({{string.Join(", ", e
             VisitISingleFunctionNode(localFunction);
         
         _code.AppendLine($$"""
-}
-""");
+                           }
+                           """);
         _currentReference = previousReference;
         
         _currentFunctionNode = previousFunctionNode;
@@ -157,8 +154,21 @@ object "{{keyValuePair.Key.FactoryName}}" as {{keyValuePair.Value}}
         foreach (var rangedInstanceFunctionGroup in element.RangedInstanceFunctionGroups)
             VisitIRangedInstanceFunctionGroupNode(rangedInstanceFunctionGroup);
         
-        foreach (var multiFunction in element.MultiFunctions)
-            VisitIMultiFunctionNode(multiFunction);
+        foreach (var multiFunctionBase in element.MultiFunctions)
+            switch (multiFunctionBase)
+            {
+                case IMultiFunctionNode multiFunctionNode:
+                    VisitIMultiFunctionNode(multiFunctionNode);
+                    break;
+                case IMultiKeyValueFunctionNode multiKeyValueFunctionNode:
+                    VisitIMultiKeyValueFunctionNode(multiKeyValueFunctionNode);
+                    break;
+                case IMultiKeyValueMultiFunctionNode multiKeyValueMultiFunctionNode:
+                    VisitIMultiKeyValueMultiFunctionNode(multiKeyValueMultiFunctionNode);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(multiFunctionBase));
+            }
     }
 
     private string? _currentReference;
@@ -183,9 +193,7 @@ package "{{element.ReturnedTypeFullName}} {{element.Name}}({{string.Join(", ", e
         foreach (var localFunction in element.LocalFunctions)
             VisitISingleFunctionNode(localFunction);
         
-        _code.AppendLine($$"""
-}
-""");
+        _code.AppendLine("}");
         _currentReference = previousReference;
         
         _currentFunctionNode = previousFunctionNode;
@@ -198,8 +206,8 @@ package "{{element.ReturnedTypeFullName}} {{element.Name}}({{string.Join(", ", e
             case IPlainFunctionCallNode createCallNode:
                 VisitIPlainFunctionCallNode(createCallNode);
                 break;
-            case IAsyncFunctionCallNode asyncFunctionCallNode:
-                VisitIAsyncFunctionCallNode(asyncFunctionCallNode);
+            case IWrappedAsyncFunctionCallNode asyncFunctionCallNode:
+                VisitIWrappedAsyncFunctionCallNode(asyncFunctionCallNode);
                 break;
             case IScopeCallNode scopeCallNode:
                 VisitIScopeCallNode(scopeCallNode);
@@ -228,6 +236,9 @@ package "{{element.ReturnedTypeFullName}} {{element.Name}}({{string.Join(", ", e
             case ILazyNode lazyNode:
                 VisitILazyNode(lazyNode);
                 break;
+            case IThreadLocalNode threadLocalNode:
+                VisitIThreadLocalNode(threadLocalNode);
+                break;
             case ITupleNode tupleNode:
                 VisitITupleNode(tupleNode);
                 break;
@@ -251,6 +262,12 @@ package "{{element.ReturnedTypeFullName}} {{element.Name}}({{string.Join(", ", e
                 break;
             case IReusedNode reusedNode:
                 VisitIReusedNode(reusedNode);
+                break;
+            case IKeyValueBasedNode keyValueBasedNode:
+                VisitIKeyValueBasedNode(keyValueBasedNode);
+                break;
+            case IKeyValuePairNode keyValuePairNode:
+                VisitIKeyValuePairNode(keyValuePairNode);
                 break;
         }
     }
@@ -295,7 +312,7 @@ object "Transient Scope Disposal Hook" as {{reference}}
     {
     }
 
-    public void VisitIAsyncFunctionCallNode(IAsyncFunctionCallNode element) => 
+    public void VisitIWrappedAsyncFunctionCallNode(IWrappedAsyncFunctionCallNode element) => 
         VisitIFunctionCallNode(element);
 
     public void VisitINullNode(INullNode element)
@@ -436,6 +453,9 @@ map "({{string.Join(", ", element.Items.Select(i => i.TypeFullName))}})" as {{re
         VisitIDelegateBaseNode(element);
 
     public void VisitILazyNode(ILazyNode element) => 
+        VisitIDelegateBaseNode(element);
+
+    public void VisitIThreadLocalNode(IThreadLocalNode element) => 
         VisitIDelegateBaseNode(element);
 
     public void VisitIEnumerableBasedNode(IEnumerableBasedNode element) => 
@@ -590,9 +610,10 @@ map "{{element.TypeFullName}}" as {{reference}} {
         var previousReference = _currentReference;
         var reference = GetOrAddReference(element);
         _currentReference = reference;
-        _code.AppendLine($$"""
-package "void {{element.Name}}({{string.Join(", ", element.Parameters.Select(p => $"{p.Node.TypeFullName}"))}})" as {{reference}} {
-""");
+        _code.AppendLine(
+            $$"""
+              package "void {{element.Name}}({{string.Join(", ", element.Parameters.Select(p => $"{p.Node.TypeFullName}"))}})" as {{reference}} {
+              """);
 
         foreach (var initialization in element.Initializations)
             VisitIFunctionCallNode(initialization.Item1);
@@ -600,9 +621,7 @@ package "void {{element.Name}}({{string.Join(", ", element.Parameters.Select(p =
         foreach (var localFunction in element.LocalFunctions)
             VisitISingleFunctionNode(localFunction);
         
-        _code.AppendLine($$"""
-}
-""");
+        _code.AppendLine("}");
         _currentReference = previousReference;
         
         _currentFunctionNode = previousFunctionNode;
@@ -610,5 +629,21 @@ package "void {{element.Name}}({{string.Join(", ", element.Parameters.Select(p =
 
     public void VisitIOutParameterNode(IOutParameterNode element)
     {
+    }
+
+    public void VisitIMultiKeyValueFunctionNode(IMultiKeyValueFunctionNode multiKeyValueFunctionNode) => 
+        VisitIMultiFunctionNodeBase(multiKeyValueFunctionNode);
+
+    public void VisitIMultiKeyValueMultiFunctionNode(IMultiKeyValueMultiFunctionNode multiKeyValueMultiFunctionNode) => 
+        VisitIMultiFunctionNodeBase(multiKeyValueMultiFunctionNode);
+
+    public void VisitIKeyValueBasedNode(IKeyValueBasedNode keyValueBasedNode)
+    {
+        // todo implement
+    }
+
+    public void VisitIKeyValuePairNode(IKeyValuePairNode keyValuePairNode)
+    {
+        // todo implement
     }
 }

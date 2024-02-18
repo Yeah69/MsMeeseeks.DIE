@@ -1,6 +1,4 @@
-using System.Collections.Generic;
-using System.Linq;
-using Microsoft.CodeAnalysis;
+using MsMeeseeks.DIE.Utility;
 using MrMeeseeks.SourceGeneratorUtility;
 using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
@@ -15,22 +13,22 @@ internal interface IContainerInfo
     IReadOnlyList<(ITypeSymbol, string, IReadOnlyList<ITypeSymbol>)> CreateFunctionData { get; }
 }
 
-internal class ContainerInfo : IContainerInfo
+internal sealed class ContainerInfo : IContainerInfo
 {
     internal ContainerInfo(
         // parameters
         INamedTypeSymbol containerClass,
             
         // dependencies
-        WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous)
+        WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous,
+        IRangeUtility rangeUtility)
     {
         Name = containerClass.Name;
         Namespace = containerClass.ContainingNamespace.FullName();
         FullName = containerClass.FullName();
         ContainerType = containerClass;
             
-        CreateFunctionData = containerClass
-            .GetAttributes()
+        CreateFunctionData = rangeUtility.GetRangeAttributes(containerClass)
             .Where(ad => CustomSymbolEqualityComparer.Default.Equals(wellKnownTypesMiscellaneous.CreateFunctionAttribute, ad.AttributeClass))
             .Select(ad => ad.ConstructorArguments.Length == 3 
                           && ad.ConstructorArguments[0].Kind == TypedConstantKind.Type

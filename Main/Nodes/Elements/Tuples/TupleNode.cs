@@ -1,9 +1,5 @@
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Nodes.Mappers;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Elements.Tuples;
 
@@ -12,7 +8,7 @@ internal interface ITupleNode : IElementNode
     IReadOnlyList<(string Name, IElementNode Node)> Parameters { get; }
 }
 
-internal partial class TupleNode : ITupleNode
+internal sealed partial class TupleNode : ITupleNode
 {
     private readonly INamedTypeSymbol _tupleType;
     private readonly IElementNodeMapperBase _elementNodeMapper;
@@ -30,7 +26,7 @@ internal partial class TupleNode : ITupleNode
         Reference = referenceGenerator.Generate(_tupleType);
     }
 
-    public void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
+    public void Build(PassedContext passedContext)
     {
         var constructor = _tupleType
             .InstanceConstructors
@@ -38,7 +34,7 @@ internal partial class TupleNode : ITupleNode
             .First();
         _parameters.AddRange(constructor
             .Parameters
-            .Select(p => (p.Name, _elementNodeMapper.Map(p.Type, implementationStack))));
+            .Select(p => (p.Name, _elementNodeMapper.Map(p.Type, passedContext))));
     }
 
     public string TypeFullName { get; }

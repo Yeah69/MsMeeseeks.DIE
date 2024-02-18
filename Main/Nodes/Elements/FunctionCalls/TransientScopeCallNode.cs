@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
@@ -16,7 +15,7 @@ internal interface ITransientScopeCallNode : IFunctionCallNode
     IFunctionCallNode? Initialization { get; }
 }
 
-internal partial class TransientScopeCallNode : FunctionCallNode, ITransientScopeCallNode
+internal sealed partial class TransientScopeCallNode : FunctionCallNode, ITransientScopeCallNode
 {
     private readonly ITransientScopeNode _scope;
 
@@ -26,11 +25,13 @@ internal partial class TransientScopeCallNode : FunctionCallNode, ITransientScop
         IContainerNode parentContainer,
         IRangeNode callingRange,
         IFunctionNode calledFunction,
+        ITypeSymbol callSideType,
         IReadOnlyList<(IParameterNode, IParameterNode)> parameters,
+        IReadOnlyList<ITypeSymbol> typeParameters,
         IFunctionCallNode? initialization,
         
         IReferenceGenerator referenceGenerator) 
-        : base(null, calledFunction, parameters, referenceGenerator)
+        : base(null, calledFunction, callSideType, parameters, typeParameters, referenceGenerator)
     {
         _scope = scope;
         ContainerParameter = containerParameter;

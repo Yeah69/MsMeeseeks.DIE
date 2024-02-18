@@ -1,13 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Elements;
 using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
 using MsMeeseeks.DIE.Nodes.Ranges;
+using MsMeeseeks.DIE.Utility;
+using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
@@ -16,7 +13,7 @@ internal interface IRangedInstanceInterfaceFunctionNode : IFunctionNode
     void AddConsideredRange(IRangeNode range);
 }
 
-internal partial class RangedInstanceInterfaceFunctionNode : ReturningFunctionNodeBase, IRangedInstanceInterfaceFunctionNode, IScopeInstance
+internal sealed partial class RangedInstanceInterfaceFunctionNode : ReturningFunctionNodeBase, IRangedInstanceInterfaceFunctionNode, IScopeInstance
 {
     private readonly INamedTypeSymbol _type;
     private readonly IContainerNode _parentContainer;
@@ -31,11 +28,12 @@ internal partial class RangedInstanceInterfaceFunctionNode : ReturningFunctionNo
         IContainerNode parentContainer,
         ITransientScopeWideContext transientScopeWideContext,
         IReferenceGenerator referenceGenerator, 
-        Func<string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<(string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
-        Func<string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
+        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
+        ITypeParameterUtility typeParameterUtility,
         IContainerWideContext containerWideContext) 
         : base(
             Microsoft.CodeAnalysis.Accessibility.Private,
@@ -49,6 +47,7 @@ internal partial class RangedInstanceInterfaceFunctionNode : ReturningFunctionNo
             asyncFunctionCallNodeFactory,
             scopeCallNodeFactory,
             transientScopeCallNodeFactory,
+            typeParameterUtility,
             containerWideContext)
     {
         _type = type;

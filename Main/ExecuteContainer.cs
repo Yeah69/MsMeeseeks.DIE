@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Immutable;
-using System.Linq;
-using System.Text;
-using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 using MsMeeseeks.DIE.Analytics;
@@ -20,7 +15,7 @@ internal interface IExecuteContainer
     void Execute();
 }
 
-internal class ExecuteContainer : IExecuteContainer
+internal sealed class ExecuteContainer : IExecuteContainer
 {
     private readonly bool _errorDescriptionInsteadOfBuildFailure;
     private readonly GeneratorExecutionContext _context;
@@ -81,7 +76,7 @@ internal class ExecuteContainer : IExecuteContainer
             }
             
             _currentExecutionPhaseSetter.Value = ExecutionPhase.Resolution;
-            _containerNode.Build(ImmutableStack.Create<INamedTypeSymbol>());
+            _containerNode.Build(new(ImmutableStack<INamedTypeSymbol>.Empty, null));
 
             if (_diagLogger.ErrorsIssued)
             {

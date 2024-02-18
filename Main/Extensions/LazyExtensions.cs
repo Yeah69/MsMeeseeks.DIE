@@ -1,5 +1,3 @@
-using System;
-
 namespace MsMeeseeks.DIE.Extensions;
 
 internal static class LazyExtensions

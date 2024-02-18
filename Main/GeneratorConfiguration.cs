@@ -1,8 +1,6 @@
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.MsContainer;
+using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE;
 
@@ -11,7 +9,7 @@ internal interface IGeneratorConfiguration
     bool ErrorDescriptionInsteadOfBuildFailure { get; }
 }
 
-internal class GeneratorConfiguration : IGeneratorConfiguration, IContainerInstance
+internal sealed class GeneratorConfiguration : IGeneratorConfiguration, IContainerInstance
 {
     public GeneratorConfiguration(
         GeneratorExecutionContext context,

@@ -1,9 +1,7 @@
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Elements;
 
@@ -13,7 +11,7 @@ internal interface IInitializedInstanceNode : IElementNode
     IFunctionCallNode BuildCall(IRangeNode range, IFunctionNode callingFunction);
 }
 
-internal partial class InitializedInstanceNode : IInitializedInstanceNode
+internal sealed partial class InitializedInstanceNode : IInitializedInstanceNode
 {
     private readonly INamedTypeSymbol _type;
 
@@ -28,9 +26,7 @@ internal partial class InitializedInstanceNode : IInitializedInstanceNode
         IsReferenceType = type.IsReferenceType;
     }
 
-    public void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
-    {
-    }
+    public void Build(PassedContext passedContext) { }
 
     public string TypeFullName { get; }
     public string Reference { get; }

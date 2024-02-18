@@ -1,8 +1,6 @@
-using System.Linq;
-using Microsoft.CodeAnalysis;
+using MsMeeseeks.DIE.Logging;
 using MrMeeseeks.SourceGeneratorUtility;
 using MrMeeseeks.SourceGeneratorUtility.Extensions;
-using MsMeeseeks.DIE.Logging;
 
 namespace MsMeeseeks.DIE.Validation.Range.UserDefined;
 

@@ -1,10 +1,9 @@
-﻿using Microsoft.CodeAnalysis;
-using MrMeeseeks.DIE.Configuration.Attributes;
+﻿using MrMeeseeks.DIE.Configuration.Attributes;
 using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE;
 
-internal record WellKnownTypesAggregation(
+internal sealed record WellKnownTypesAggregation(
     INamedTypeSymbol ImplementationAggregationAttribute,
     INamedTypeSymbol TransientAbstractionAggregationAttribute,
     INamedTypeSymbol SyncTransientAbstractionAggregationAttribute,

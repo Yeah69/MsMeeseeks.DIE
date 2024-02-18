@@ -1,6 +1,4 @@
-﻿using System.Collections.Generic;
-using Microsoft.CodeAnalysis;
-using MsMeeseeks.DIE.MsContainer;
+﻿using MsMeeseeks.DIE.MsContainer;
 
 namespace MsMeeseeks.DIE.Logging;
 
@@ -12,7 +10,7 @@ internal interface IDiagLogger
     void Log(Diagnostic diagnostic);
 }
 
-internal class DiagLogger : IDiagLogger, IContainerInstance
+internal sealed class DiagLogger : IDiagLogger, IContainerInstance
 {
     private readonly bool _ignoreErrors;
     private readonly GeneratorExecutionContext _context;

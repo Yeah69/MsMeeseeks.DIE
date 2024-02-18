@@ -1,4 +1,3 @@
-using System;
 using MsMeeseeks.DIE.Extensions;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Ranges;
@@ -10,7 +9,7 @@ internal interface IContainerLevelLogMessageEnhancer
     string Enhance(string message);
 }
 
-internal class ContainerLevelLogMessageEnhancer : IContainerLevelLogMessageEnhancer, IContainerInstance
+internal sealed class ContainerLevelLogMessageEnhancer : IContainerLevelLogMessageEnhancer, IContainerInstance
 {
     private readonly ICurrentExecutionPhase _currentExecutionPhase;
     private readonly Lazy<string> _containerPart;

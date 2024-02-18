@@ -1,12 +1,10 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using MsMeeseeks.DIE.Configuration;
 using MrMeeseeks.DIE.Configuration.Attributes;
-using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
 using MsMeeseeks.DIE.Nodes.Roots;
-
 // ReSharper disable InconsistentNaming
 
 namespace MsMeeseeks.DIE.MsContainer;
@@ -155,6 +153,22 @@ internal sealed partial class MsContainer
     [CustomScopeForRootTypes(typeof(VoidFunctionNodeRoot))]
     [InitializedInstances(typeof(ReferenceGenerator))]
     private sealed partial class DIE_Scope_VoidFunctionNodeRoot
+    {
+    }
+
+    [ImplementationChoice(typeof(IFunctionNode), typeof(MultiKeyValueFunctionNode))]
+    [ImplementationChoice(typeof(IFunctionLevelLogMessageEnhancer), typeof(FunctionLevelLogMessageEnhancer))]
+    [CustomScopeForRootTypes(typeof(MultiKeyValueFunctionNodeRoot))]
+    [InitializedInstances(typeof(ReferenceGenerator))]
+    private sealed partial class DIE_Scope_MultiKeyValueFunctionNodeRoot
+    {
+    }
+
+    [ImplementationChoice(typeof(IFunctionNode), typeof(MultiKeyValueMultiFunctionNode))]
+    [ImplementationChoice(typeof(IFunctionLevelLogMessageEnhancer), typeof(FunctionLevelLogMessageEnhancer))]
+    [CustomScopeForRootTypes(typeof(MultiKeyValueMultiFunctionNodeRoot))]
+    [InitializedInstances(typeof(ReferenceGenerator))]
+    private sealed partial class DIE_Scope_MultiKeyValueMultiFunctionNodeRoot
     {
     }
 }

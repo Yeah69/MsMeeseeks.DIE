@@ -1,11 +1,8 @@
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Visitors;
+using MrMeeseeks.SourceGeneratorUtility;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Elements.Factories;
 
@@ -42,7 +39,7 @@ internal abstract class FactoryNodeBase : IFactoryNodeBase
         }
     }
     
-    public virtual void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
+    public virtual void Build(PassedContext passedContext)
     {
         _parentFunction.RegisterAwaitableNode(this);
     }

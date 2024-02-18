@@ -1,15 +1,11 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
 using MrMeeseeks.DIE.Configuration.Attributes;
-using MrMeeseeks.SourceGeneratorUtility;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
+using MsMeeseeks.DIE.Utility;
 using MsMeeseeks.DIE.Validation.Attributes;
 using MsMeeseeks.DIE.Validation.Range.UserDefined;
+using MrMeeseeks.SourceGeneratorUtility;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Validation.Range;
 
@@ -17,10 +13,11 @@ internal interface IValidateContainer : IValidateRange
 {
 }
 
-internal class ValidateContainer : ValidateRange, IValidateContainer
+internal sealed class ValidateContainer : ValidateRange, IValidateContainer
 {
     private readonly IValidateTransientScope _validateTransientScopeFactory;
     private readonly IValidateScope _validateScopeFactory;
+    private readonly IRangeUtility _rangeUtility;
     private readonly WellKnownTypesMiscellaneous _wellKnownTypesMiscellaneous;
 
     internal ValidateContainer(
@@ -35,7 +32,8 @@ internal class ValidateContainer : ValidateRange, IValidateContainer
         IValidateUserDefinedFactoryField validateUserDefinedFactoryField,
         IValidateAttributes validateAttributes,
         IContainerWideContext containerWideContext,
-        ILocalDiagLogger localDiagLogger) 
+        ILocalDiagLogger localDiagLogger,
+        IRangeUtility rangeUtility) 
         : base(
             validateUserDefinedAddForDisposalSync, 
             validateUserDefinedAddForDisposalAsync, 
@@ -46,10 +44,12 @@ internal class ValidateContainer : ValidateRange, IValidateContainer
             validateUserDefinedFactoryField,
             validateAttributes,
             containerWideContext,
-            localDiagLogger)
+            localDiagLogger,
+            rangeUtility)
     {
         _validateTransientScopeFactory = validateTransientScopeFactory;
         _validateScopeFactory = validateScopeFactory;
+        _rangeUtility = rangeUtility;
         _wellKnownTypesMiscellaneous = containerWideContext.WellKnownTypesMiscellaneous;
     }
 
@@ -57,18 +57,11 @@ internal class ValidateContainer : ValidateRange, IValidateContainer
     {
         base.Validate(rangeType, containerType);
         
-        if (!rangeType.InstanceConstructors.Any())
-            LocalDiagLogger.Error(
-                ValidationErrorDiagnostic(
-                    rangeType,
-                    rangeType,
-                    "The container class has to have at least one constructor."), 
-                rangeType.Locations.FirstOrDefault() ?? Location.None);
-            
-        
         foreach (var instanceConstructor in rangeType
                      .InstanceConstructors
-                     .Where(instanceConstructor => instanceConstructor.DeclaredAccessibility != Accessibility.Private))
+                     .Where(instanceConstructor => 
+                         !instanceConstructor.IsImplicitlyDeclared 
+                         && instanceConstructor.DeclaredAccessibility != Accessibility.Private))
             LocalDiagLogger.Error(
                 ValidationErrorDiagnostic(
                     rangeType, 
@@ -83,7 +76,7 @@ internal class ValidateContainer : ValidateRange, IValidateContainer
         var customTransientScopeTypes = new HashSet<INamedTypeSymbol>(CustomSymbolEqualityComparer.Default);
         foreach (var customTransientScope in rangeType
                      .GetTypeMembers()
-                     .Where(nts => nts.Name.StartsWith(Constants.CustomTransientScopeName)))
+                     .Where(nts => nts.Name.StartsWith(Constants.CustomTransientScopeName, StringComparison.Ordinal)))
         {
             ValidateCustomScope(customTransientScope, customTransientScopeTypes);
             _validateTransientScopeFactory.Validate(customTransientScope, rangeType);
@@ -96,14 +89,14 @@ internal class ValidateContainer : ValidateRange, IValidateContainer
         var customScopeTypes = new HashSet<INamedTypeSymbol>(CustomSymbolEqualityComparer.Default);
         foreach (var customScope in rangeType
                      .GetTypeMembers()
-                     .Where(nts => nts.Name.StartsWith(Constants.CustomScopeName)))
+                     .Where(nts => nts.Name.StartsWith(Constants.CustomScopeName, StringComparison.Ordinal)))
         {
             ValidateCustomScope(customScope, customScopeTypes);
             _validateScopeFactory.Validate(customScope, rangeType);
         }
 
-        var createFunctionAttributes = rangeType
-            .GetAttributes()
+        var createFunctionAttributes = _rangeUtility
+            .GetRangeAttributes(rangeType)
             .Where(ad =>
                 CustomSymbolEqualityComparer.Default.Equals(
                     ad.AttributeClass, 
@@ -128,9 +121,9 @@ internal class ValidateContainer : ValidateRange, IValidateContainer
                     LocalDiagLogger.Error(
                         ValidationErrorDiagnostic(rangeType, rangeType, $"Create function isn't allowed to have the name \"{nameof(IDisposable.Dispose)}\", because a method with that name may have to be generated by the container."),
                         location);
-                if (functionName == nameof(IAsyncDisposable.DisposeAsync))
+                if (functionName == Constants.IAsyncDisposableDisposeAsync)
                     LocalDiagLogger.Error(
-                        ValidationErrorDiagnostic(rangeType, rangeType, $"Create function isn't allowed to have the name \"{nameof(IAsyncDisposable.DisposeAsync)}\", because a method with that name will be generated by the container."), 
+                        ValidationErrorDiagnostic(rangeType, rangeType, $"Create function isn't allowed to have the name \"{Constants.IAsyncDisposableDisposeAsync}\", because a method with that name will be generated by the container."), 
                         location);
 
                 foreach (var concreteFunctionName in new [] { $"{functionName}{Constants.CreateFunctionSuffix}", $"{functionName}{Constants.CreateFunctionSuffixAsync}", $"{functionName}{Constants.CreateFunctionSuffixValueAsync}"})

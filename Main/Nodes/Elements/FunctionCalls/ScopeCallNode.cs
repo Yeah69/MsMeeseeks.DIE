@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
@@ -16,7 +15,7 @@ internal interface IScopeCallNode : IFunctionCallNode
     IFunctionCallNode? Initialization { get; }
 }
 
-internal partial class ScopeCallNode : FunctionCallNode, IScopeCallNode
+internal sealed partial class ScopeCallNode : FunctionCallNode, IScopeCallNode
 {
     private readonly IScopeNode _scope;
     private readonly IRangeNode _callingRange;
@@ -26,11 +25,13 @@ internal partial class ScopeCallNode : FunctionCallNode, IScopeCallNode
         IScopeNode scope,
         IRangeNode callingRange,
         IFunctionNode calledFunction, 
+        ITypeSymbol callSideType,
         IReadOnlyList<(IParameterNode, IParameterNode)> parameters, 
+        IReadOnlyList<ITypeSymbol> typeParameters,
         IFunctionCallNode? initialization,
         
         IReferenceGenerator referenceGenerator) 
-        : base(null, calledFunction, parameters, referenceGenerator)
+        : base(null, calledFunction, callSideType, parameters, typeParameters, referenceGenerator)
     {
         _scope = scope;
         _callingRange = callingRange;

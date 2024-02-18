@@ -1,8 +1,6 @@
-using System.Collections.Generic;
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.MsContainer;
+using MrMeeseeks.SourceGeneratorUtility;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Utility;
 
@@ -11,7 +9,7 @@ internal interface IInjectablePropertyExtractor
     IEnumerable<IPropertySymbol> GetInjectableProperties(INamedTypeSymbol implementationType);
 }
 
-internal class InjectablePropertyExtractor : IInjectablePropertyExtractor, IContainerInstance
+internal sealed class InjectablePropertyExtractor : IInjectablePropertyExtractor, IContainerInstance
 {
     private readonly ICheckInternalsVisible _checkInternalsVisible;
 

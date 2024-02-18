@@ -1,8 +1,6 @@
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.MsContainer;
+using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Analytics;
 
@@ -12,7 +10,7 @@ internal interface IAnalyticsFlags
     bool ErrorFilteredResolutionGraph { get; }
 }
 
-internal class AnalyticsFlags : IAnalyticsFlags, IContainerInstance
+internal sealed class AnalyticsFlags : IAnalyticsFlags, IContainerInstance
 {
     private readonly MrMeeseeks.DIE.Configuration.Attributes.Analytics? _analytics;
     

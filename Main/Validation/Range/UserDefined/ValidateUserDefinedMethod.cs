@@ -1,6 +1,4 @@
-using System.Linq;
 using System.Reflection.Metadata;
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Logging;
 
 namespace MsMeeseeks.DIE.Validation.Range.UserDefined;
@@ -22,10 +20,8 @@ internal abstract class ValidateUserDefinedMethod : IValidateUserDefinedMethod
     {
         if (method is
             {
-                DeclaredAccessibility: Accessibility.Private,
-                Arity: 0,
+                DeclaredAccessibility: Accessibility.Private or Accessibility.Protected,
                 CallingConvention: SignatureCallingConvention.Default,
-                IsAsync: false,
                 IsConditional: false,
                 IsVararg: false,
                 IsExtensionMethod: false,
@@ -35,28 +31,19 @@ internal abstract class ValidateUserDefinedMethod : IValidateUserDefinedMethod
                 IsImplicitlyDeclared: false
             })
         {
+            return;
         }
         
-        if (method.DeclaredAccessibility != Accessibility.Private)
+        if (method.DeclaredAccessibility != Accessibility.Private && method.DeclaredAccessibility != Accessibility.Protected)
             LocalDiagLogger.Error(
-                ValidationErrorDiagnostic(method, rangeType, containerType, "Has to be private."),
-                method.Locations.FirstOrDefault() ?? Location.None);
-        
-        if (method.Arity != 0)
-            LocalDiagLogger.Error(
-                ValidationErrorDiagnostic(method, rangeType, containerType, "Has to have an arity of zero."),
+                ValidationErrorDiagnostic(method, rangeType, containerType, "Has to be private or protected."),
                 method.Locations.FirstOrDefault() ?? Location.None);
         
         if (method.CallingConvention != SignatureCallingConvention.Default)
             LocalDiagLogger.Error(
                 ValidationErrorDiagnostic(method, rangeType, containerType, "Has to have a default calling signature."),
                 method.Locations.FirstOrDefault() ?? Location.None);
-        
-        if (method.IsAsync)
-            LocalDiagLogger.Error(
-                ValidationErrorDiagnostic(method, rangeType, containerType, "Isn't allowed to be async."),
-                method.Locations.FirstOrDefault() ?? Location.None);
-        
+
         if (method.IsConditional)
             LocalDiagLogger.Error(
                 ValidationErrorDiagnostic(method, rangeType, containerType, "Isn't allowed to be marked with the ConditionalAttribute."),

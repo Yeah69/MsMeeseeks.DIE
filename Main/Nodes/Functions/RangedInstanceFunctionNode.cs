@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.MsContainer;
@@ -10,6 +5,8 @@ using MsMeeseeks.DIE.Nodes.Elements;
 using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
 using MsMeeseeks.DIE.Nodes.Mappers;
 using MsMeeseeks.DIE.Nodes.Ranges;
+using MsMeeseeks.DIE.Utility;
+using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
@@ -25,7 +22,7 @@ internal interface IRangedInstanceFunctionNodeInitializer
     void Initialize(string name, string explicitInterfaceFullName);
 }
 
-internal partial class RangedInstanceFunctionNode : SingleFunctionNodeBase, IRangedInstanceFunctionNode, IRangedInstanceFunctionNodeInitializer, IScopeInstance
+internal sealed partial class RangedInstanceFunctionNode : SingleFunctionNodeBase, IRangedInstanceFunctionNode, IRangedInstanceFunctionNodeInitializer, IScopeInstance
 {
     private readonly INamedTypeSymbol _type;
     private readonly Func<IElementNodeMapper> _typeToElementNodeMapperFactory;
@@ -41,11 +38,12 @@ internal partial class RangedInstanceFunctionNode : SingleFunctionNodeBase, IRan
         IContainerNode parentContainer, 
         IReferenceGenerator referenceGenerator, 
         Func<IElementNodeMapper> typeToElementNodeMapperFactory,
-        Func<string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<(string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
-        Func<string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
+        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
+        ITypeParameterUtility typeParameterUtility,
         IContainerWideContext containerWideContext) 
         : base(
             Microsoft.CodeAnalysis.Accessibility.Private,
@@ -59,6 +57,7 @@ internal partial class RangedInstanceFunctionNode : SingleFunctionNodeBase, IRan
             asyncFunctionCallNodeFactory,
             scopeCallNodeFactory,
             transientScopeCallNodeFactory,
+            typeParameterUtility,
             containerWideContext)
     {
         _type = type;
@@ -71,7 +70,11 @@ internal partial class RangedInstanceFunctionNode : SingleFunctionNodeBase, IRan
 
     protected override IElementNode MapToReturnedElement(IElementNodeMapperBase mapper) => 
         // "MapToImplementation" instead of "Map", because latter would cause an infinite recursion ever trying to create a new ranged instance function
-        mapper.MapToImplementation(new(true, false, false), null, _type, ImmutableStack<INamedTypeSymbol>.Empty); 
+        mapper.MapToImplementation(
+            new(true, false, false), 
+            null, 
+            _type,
+            new(ImmutableStack<INamedTypeSymbol>.Empty, null)); 
 
     public override string Name { get; protected set; }
 

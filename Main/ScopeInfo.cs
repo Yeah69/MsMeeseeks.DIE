@@ -1,5 +1,3 @@
-using Microsoft.CodeAnalysis;
-
 namespace MsMeeseeks.DIE;
 
 internal interface IScopeInfo
@@ -8,7 +6,7 @@ internal interface IScopeInfo
     INamedTypeSymbol? ScopeType { get; }
 }
 
-internal class ScopeInfo : IScopeInfo
+internal sealed class ScopeInfo : IScopeInfo
 {
     internal ScopeInfo(
         string name,

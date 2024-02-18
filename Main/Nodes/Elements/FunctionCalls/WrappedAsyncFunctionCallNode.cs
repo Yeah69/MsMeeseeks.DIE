@@ -1,9 +1,6 @@
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Nodes.Functions;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
 
@@ -17,22 +14,23 @@ internal enum AsyncFunctionCallTransformation
     TaskFromSync
 }
 
-internal interface IAsyncFunctionCallNode : IFunctionCallNode
+internal interface IWrappedAsyncFunctionCallNode : IFunctionCallNode
 {
     AsyncFunctionCallTransformation Transformation { get; }
     void AdjustToCurrentCalledFunctionSynchronicity();
 }
 
-internal partial class AsyncFunctionCallNode : IAsyncFunctionCallNode
+internal sealed partial class WrappedAsyncFunctionCallNode : IWrappedAsyncFunctionCallNode
 {
     private readonly IFunctionNode _calledFunction;
 
-    public AsyncFunctionCallNode(
+    public WrappedAsyncFunctionCallNode(
         ITypeSymbol wrappedType,
         string? ownerReference,
         SynchronicityDecision synchronicityDecision,
         IFunctionNode calledFunction,
         IReadOnlyList<(IParameterNode, IParameterNode)> parameters,
+        IReadOnlyList<ITypeSymbol> typeParameters,
         
         IReferenceGenerator referenceGenerator,
         IContainerWideContext containerWideContext)
@@ -40,6 +38,7 @@ internal partial class AsyncFunctionCallNode : IAsyncFunctionCallNode
         OwnerReference = ownerReference;
         FunctionName = calledFunction.Name;
         Parameters = parameters;
+        TypeParameters = typeParameters;
         SynchronicityDecision = synchronicityDecision;
         _calledFunction = calledFunction;
         Transformation = synchronicityDecision is SynchronicityDecision.AsyncValueTask
@@ -53,9 +52,7 @@ internal partial class AsyncFunctionCallNode : IAsyncFunctionCallNode
         TypeFullName = asyncType.FullName();
     }
 
-    public void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
-    {
-    }
+    public void Build(PassedContext passedContext) { }
     
     public AsyncFunctionCallTransformation Transformation { get; private set; }
     
@@ -79,6 +76,7 @@ internal partial class AsyncFunctionCallNode : IAsyncFunctionCallNode
     public string? OwnerReference { get; }
     public string FunctionName { get; }
     public IReadOnlyList<(IParameterNode, IParameterNode)> Parameters { get; }
+    public IReadOnlyList<ITypeSymbol> TypeParameters { get; }
     public IFunctionNode CalledFunction => _calledFunction;
-    public bool Awaited { get; } = false;
+    public bool Awaited => false; // never awaited, because it's a wrapped async function call
 }

@@ -1,13 +1,10 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
+using MsMeeseeks.DIE.Utility;
+using MrMeeseeks.SourceGeneratorUtility;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
-namespace MsMeeseeks.DIE;
+namespace MsMeeseeks.DIE.Configuration;
 
 internal interface IUserDefinedElements
 {
@@ -21,14 +18,14 @@ internal interface IUserDefinedElements
     IMethodSymbol? GetInitializerParametersInjectionFor(INamedTypeSymbol type);
 }
 
-internal class UserDefinedElements : IUserDefinedElements
+internal sealed class UserDefinedElements : IUserDefinedElements
 {
-    private readonly IReadOnlyDictionary<ITypeSymbol, IFieldSymbol> _typeToField;
-    private readonly IReadOnlyDictionary<ITypeSymbol, IPropertySymbol> _typeToProperty;
-    private readonly IReadOnlyDictionary<ITypeSymbol, IMethodSymbol> _typeToMethod;
-    private readonly IReadOnlyDictionary<INamedTypeSymbol, IMethodSymbol> _constructorParametersInjectionMethods;
-    private readonly IReadOnlyDictionary<INamedTypeSymbol, IMethodSymbol> _propertiesInjectionMethods;
-    private readonly IReadOnlyDictionary<INamedTypeSymbol, IMethodSymbol> _initializerParametersInjectionMethods;
+    private readonly Dictionary<ITypeSymbol, IFieldSymbol> _typeToField;
+    private readonly Dictionary<ITypeSymbol, IPropertySymbol> _typeToProperty;
+    private readonly Dictionary<ITypeSymbol, IMethodSymbol> _typeToMethod;
+    private readonly Dictionary<INamedTypeSymbol, IMethodSymbol> _constructorParametersInjectionMethods;
+    private readonly Dictionary<INamedTypeSymbol, IMethodSymbol> _propertiesInjectionMethods;
+    private readonly Dictionary<INamedTypeSymbol, IMethodSymbol> _initializerParametersInjectionMethods;
 
     public UserDefinedElements(
         // parameter
@@ -36,17 +33,18 @@ internal class UserDefinedElements : IUserDefinedElements
 
         // dependencies
         IContainerWideContext containerWideContext,
-        ILocalDiagLogger localDiagLogger)
+        ILocalDiagLogger localDiagLogger,
+        IRangeUtility rangeUtility)
     {
         if (types.Range is { } range)
         {
-            var dieMembers = range.GetMembers()
-                .Where(s => s.Name.StartsWith($"{Constants.DieAbbreviation}_"))
+            var dieMembers = rangeUtility.GetEffectiveMembers(range) 
+                .Where(s => s.Name.StartsWith($"{Constants.DieAbbreviation}_", StringComparison.Ordinal))
                 .ToList();
 
             var wellKnownTypes = containerWideContext.WellKnownTypes;
             var nonValidFactoryMembers = dieMembers
-                .Where(s => s.Name.StartsWith(Constants.UserDefinedFactory)
+                .Where(s => s.Name.StartsWith(Constants.UserDefinedFactory, StringComparison.Ordinal)
                             && s is IFieldSymbol or IPropertySymbol or IMethodSymbol)
                 .GroupBy(s =>
                 {
@@ -95,7 +93,7 @@ internal class UserDefinedElements : IUserDefinedElements
             else
             {
                 _typeToField = dieMembers
-                    .Where(s => s.Name.StartsWith(Constants.UserDefinedFactory))
+                    .Where(s => s.Name.StartsWith(Constants.UserDefinedFactory, StringComparison.Ordinal))
                     .OfType<IFieldSymbol>()
                     .ToDictionary<IFieldSymbol, ITypeSymbol, IFieldSymbol>(
                         fs => GetAsyncUnwrappedType(fs.Type, wellKnownTypes), 
@@ -103,8 +101,8 @@ internal class UserDefinedElements : IUserDefinedElements
                         CustomSymbolEqualityComparer.IncludeNullability);
             
                 _typeToProperty = dieMembers
-                    .Where(s => s.Name.StartsWith(Constants.UserDefinedFactory))
-                    .Where(s => s is IPropertySymbol { GetMethod: { } })
+                    .Where(s => s.Name.StartsWith(Constants.UserDefinedFactory, StringComparison.Ordinal))
+                    .Where(s => s is IPropertySymbol { GetMethod: not null })
                     .OfType<IPropertySymbol>()
                     .ToDictionary<IPropertySymbol, ITypeSymbol, IPropertySymbol>(
                         ps => GetAsyncUnwrappedType(ps.Type, wellKnownTypes), 
@@ -112,7 +110,7 @@ internal class UserDefinedElements : IUserDefinedElements
                         CustomSymbolEqualityComparer.IncludeNullability);
             
                 _typeToMethod = dieMembers
-                    .Where(s => s.Name.StartsWith(Constants.UserDefinedFactory))
+                    .Where(s => s.Name.StartsWith(Constants.UserDefinedFactory, StringComparison.Ordinal))
                     .Where(s => s is IMethodSymbol { ReturnsVoid: false, Arity: 0, IsConditional: false, MethodKind: MethodKind.Ordinary })
                     .OfType<IMethodSymbol>()
                     .ToDictionary<IMethodSymbol, ITypeSymbol, IMethodSymbol>(
@@ -124,7 +122,7 @@ internal class UserDefinedElements : IUserDefinedElements
             AddForDisposal = dieMembers
                 .Where(s => s is IMethodSymbol
                 {
-                    DeclaredAccessibility: Accessibility.Private,
+                    DeclaredAccessibility: Accessibility.Private or Accessibility.Protected,
                     Arity: 0,
                     ReturnsVoid: true,
                     IsPartialDefinition: true,
@@ -134,18 +132,20 @@ internal class UserDefinedElements : IUserDefinedElements
                 .OfType<IMethodSymbol>()
                 .FirstOrDefault();
             
-            AddForDisposalAsync = dieMembers
-                .Where(s => s is IMethodSymbol
-                {
-                    DeclaredAccessibility: Accessibility.Private,
-                    Arity: 0,
-                    ReturnsVoid: true,
-                    IsPartialDefinition: true,
-                    Name: Constants.UserDefinedAddForDisposalAsync,
-                    Parameters.Length: 1
-                } method && CustomSymbolEqualityComparer.Default.Equals(method.Parameters[0].Type, wellKnownTypes.IAsyncDisposable))
-                .OfType<IMethodSymbol>()
-                .FirstOrDefault();
+            AddForDisposalAsync = containerWideContext.WellKnownTypes.IAsyncDisposable is not null 
+                ? dieMembers
+                    .Where(s => s is IMethodSymbol
+                    {
+                        DeclaredAccessibility: Accessibility.Private or Accessibility.Protected,
+                        Arity: 0,
+                        ReturnsVoid: true,
+                        IsPartialDefinition: true,
+                        Name: Constants.UserDefinedAddForDisposalAsync,
+                        Parameters.Length: 1
+                    } method && CustomSymbolEqualityComparer.Default.Equals(method.Parameters[0].Type, wellKnownTypes.IAsyncDisposable))
+                    .OfType<IMethodSymbol>()
+                    .FirstOrDefault()
+                : null;
 
             var wellKnownTypesMiscellaneous = containerWideContext.WellKnownTypesMiscellaneous;
             _constructorParametersInjectionMethods = GetInjectionMethods(Constants.UserDefinedConstrParams, wellKnownTypesMiscellaneous.UserDefinedConstructorParametersInjectionAttribute);
@@ -154,11 +154,11 @@ internal class UserDefinedElements : IUserDefinedElements
             
             _initializerParametersInjectionMethods = GetInjectionMethods(Constants.UserDefinedInitParams, wellKnownTypesMiscellaneous.UserDefinedInitializerParametersInjectionAttribute);
 
-            IReadOnlyDictionary<INamedTypeSymbol, IMethodSymbol> GetInjectionMethods(string prefix, INamedTypeSymbol attributeType)
+            Dictionary<INamedTypeSymbol, IMethodSymbol> GetInjectionMethods(string prefix, INamedTypeSymbol attributeType)
             {
                 var injectionMethodCandidates = dieMembers
-                .Where(s => s.Name.StartsWith(prefix))
-                .Where(s => s is IMethodSymbol { ReturnsVoid: true, Arity: 0, IsConditional: false, MethodKind: MethodKind.Ordinary } method
+                .Where(s => s.Name.StartsWith(prefix, StringComparison.Ordinal))
+                .Where(s => s is IMethodSymbol { ReturnsVoid: true, IsConditional: false, MethodKind: MethodKind.Ordinary } method
                             && method.Parameters.Any(p => p.RefKind == RefKind.Out))
                 .OfType<IMethodSymbol>()
                 .Select(m =>
@@ -174,7 +174,7 @@ internal class UserDefinedElements : IUserDefinedElements
                         .OfType<INamedTypeSymbol>()
                         .FirstOrDefault();
 
-                    return type is { } ? (type, m) : ((INamedTypeSymbol, IMethodSymbol)?) null;
+                    return type is not null ? (type, m) : ((INamedTypeSymbol, IMethodSymbol)?) null;
                 })
                 .OfType<(INamedTypeSymbol, IMethodSymbol)>()
                 .ToImmutableArray();
@@ -242,11 +242,11 @@ internal class UserDefinedElements : IUserDefinedElements
     public IMethodSymbol? AddForDisposal { get; }
     public IMethodSymbol? AddForDisposalAsync { get; }
     public IMethodSymbol? GetConstructorParametersInjectionFor(INamedTypeSymbol type) => 
-        _constructorParametersInjectionMethods.TryGetValue(type, out var ret) ? ret : null;
+        _constructorParametersInjectionMethods.TryGetValue(type.UnboundIfGeneric(), out var ret) ? ret : null;
 
     public IMethodSymbol? GetPropertiesInjectionFor(INamedTypeSymbol type) =>
-        _propertiesInjectionMethods.TryGetValue(type, out var ret) ? ret : null;
+        _propertiesInjectionMethods.TryGetValue(type.UnboundIfGeneric(), out var ret) ? ret : null;
 
     public IMethodSymbol? GetInitializerParametersInjectionFor(INamedTypeSymbol type) => 
-        _initializerParametersInjectionMethods.TryGetValue(type, out var ret) ? ret : null;
+        _initializerParametersInjectionMethods.TryGetValue(type.UnboundIfGeneric(), out var ret) ? ret : null;
 }

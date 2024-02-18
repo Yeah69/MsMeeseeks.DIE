@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using Microsoft.CodeAnalysis.CSharp;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
+﻿using Microsoft.CodeAnalysis.CSharp;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Extensions;
@@ -14,6 +9,8 @@ using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
 using MsMeeseeks.DIE.Nodes.Elements.Tuples;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
+using MrMeeseeks.SourceGeneratorUtility;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Visitors;
 
@@ -22,32 +19,34 @@ internal interface ICodeGenerationVisitor : INodeVisitor
     string GenerateContainerFile();
 }
 
-internal class CodeGenerationVisitor : ICodeGenerationVisitor
+internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
 {
+    private readonly IReferenceGenerator _referenceGenerator;
     private readonly StringBuilder _code = new();
     private readonly WellKnownTypes _wellKnownTypes;
     private readonly WellKnownTypesCollections _wellKnownTypesCollections;
 
     public CodeGenerationVisitor(
-        IContainerWideContext containerWideContext)
+        IContainerWideContext containerWideContext,
+        IReferenceGenerator referenceGenerator)
     {
+        _referenceGenerator = referenceGenerator;
         _wellKnownTypes = containerWideContext.WellKnownTypes;
         _wellKnownTypesCollections = containerWideContext.WellKnownTypesCollections;
     }
 
     public void VisitIContainerNode(IContainerNode container)
     {
-        var disposableImplementation = container.DisposalType.HasFlag(DisposalType.Async)
-            ? $" , {_wellKnownTypes.IAsyncDisposable.FullName()}"
-            : $" , {_wellKnownTypes.IAsyncDisposable.FullName()}, {_wellKnownTypes.IDisposable.FullName()}";
-
         _code.AppendLine($$"""
-#nullable enable
-namespace {{container.Namespace}}
-{
-sealed partial class {{container.Name}} : {{container.TransientScopeInterface.FullName}}{{disposableImplementation}}
-{
-""");
+            #nullable enable
+            namespace {{container.Namespace}}
+            {
+            sealed partial class {{container.Name}} : {{container.TransientScopeInterface.FullName}} , {{GenerateDisposalInterfaceAssignments(container.DisposalType)}}
+            {
+            """);
+        if (container.GenerateEmptyConstructor) 
+            _code.AppendLine($"private {container.Name}() {{ }}");
+        
         foreach (var containerCreateContainerFunction in container.CreateContainerFunctions)
             VisitICreateContainerFunctionNode(containerCreateContainerFunction);
 
@@ -56,7 +55,7 @@ sealed partial class {{container.Name}} : {{container.TransientScopeInterface.Fu
 
         GenerateRangeNodeContent(container);
         
-        var dictionaryTypeName = container.DisposalType.HasFlag(DisposalType.Async)
+        var dictionaryTypeName = _wellKnownTypes.ConcurrentDictionaryOfAsyncDisposable is not null && container.DisposalType.HasFlag(DisposalType.Async)
             ? _wellKnownTypes.ConcurrentDictionaryOfAsyncDisposable.FullName()
             : _wellKnownTypes.ConcurrentDictionaryOfSyncDisposable.FullName();
 
@@ -72,10 +71,10 @@ sealed partial class {{container.Name}} : {{container.TransientScopeInterface.Fu
             VisitITransientScopeNode(transientScope);
         
         _code.AppendLine("""
-}
-}
-#nullable disable
-""");
+            }
+            }
+            #nullable disable
+            """);
     }
 
     public void VisitICreateContainerFunctionNode(ICreateContainerFunctionNode createContainerFunction)
@@ -88,24 +87,24 @@ sealed partial class {{container.Name}} : {{container.TransientScopeInterface.Fu
             : "";
         
         _code.AppendLine($$"""
-public static {{asyncPrefix}}{{createContainerFunction.ReturnTypeFullName}} {{Constants.CreateContainerFunctionName}}({{string.Join(", ", createContainerFunction.Parameters.Select(p => $"{p.TypeFullName} {StringExtensions.PrefixAtIfKeyword(p.Reference)}"))}})
-{
-{{createContainerFunction.ContainerTypeFullName}} {{createContainerFunction.ContainerReference}} = new {{createContainerFunction.ContainerTypeFullName}}({{string.Join(", ", createContainerFunction.Parameters.Select(p => $"{p.Reference.PrefixAtIfKeyword()}: {p.Reference.PrefixAtIfKeyword()}"))}});
-""");
+            public static {{asyncPrefix}}{{createContainerFunction.ReturnTypeFullName}} {{Constants.CreateContainerFunctionName}}({{string.Join(", ", createContainerFunction.Parameters.Select(p => $"{p.TypeFullName} {p.Reference.PrefixAtIfKeyword()}"))}})
+            {
+            {{createContainerFunction.ContainerTypeFullName}} {{createContainerFunction.ContainerReference}} = new {{createContainerFunction.ContainerTypeFullName}}({{string.Join(", ", createContainerFunction.Parameters.Select(p => $"{p.Reference.PrefixAtIfKeyword()}: {p.Reference.PrefixAtIfKeyword()}"))}});
+            """);
         if (createContainerFunction.InitializationFunctionName is { } initializationFunctionName)
             _code.AppendLine($"{awaitPrefix}{createContainerFunction.ContainerReference}.{initializationFunctionName}();");
         _code.AppendLine($$"""
-return {{createContainerFunction.ContainerReference}};
-}
-""");
+            return {{createContainerFunction.ContainerReference}};
+            }
+            """);
     }
 
     public void VisitITransientScopeInterfaceNode(ITransientScopeInterfaceNode transientScopeInterface)
     {
         _code.AppendLine($$"""
-private interface {{transientScopeInterface.Name}}
-{
-""");
+            private interface {{transientScopeInterface.Name}}
+            {
+            """);
         foreach (var rangedInstanceInterfaceFunctionNode in transientScopeInterface.Functions)
             VisitIRangedInstanceInterfaceFunctionNode(rangedInstanceInterfaceFunctionNode);
         
@@ -114,21 +113,17 @@ private interface {{transientScopeInterface.Name}}
 
     public void VisitIScopeNode(IScopeNode scope)
     {
-        var disposableImplementation = scope.DisposalType.HasFlag(DisposalType.Async) 
-            ? $" : {_wellKnownTypes.IAsyncDisposable.FullName()}" 
-            : $" : {_wellKnownTypes.IAsyncDisposable.FullName()}, {_wellKnownTypes.IDisposable.FullName()}";
-        
         _code.AppendLine($$"""
-private sealed partial class {{scope.Name}}{{disposableImplementation}}
-{
-private readonly {{scope.ContainerFullName}} {{scope.ContainerReference}};
-private readonly {{scope.TransientScopeInterfaceFullName}} {{scope.TransientScopeInterfaceReference}};
-internal {{scope.Name}}({{scope.ContainerFullName}} {{scope.ContainerParameterReference}}, {{scope.TransientScopeInterfaceFullName}} {{scope.TransientScopeInterfaceParameterReference}})
-{
-{{scope.ContainerReference}} = {{scope.ContainerParameterReference}};
-{{scope.TransientScopeInterfaceReference}} = {{scope.TransientScopeInterfaceParameterReference}};
-}
-""");
+            private sealed partial class {{scope.Name}} : {{GenerateDisposalInterfaceAssignments(scope.DisposalType)}}
+            {
+            private readonly {{scope.ContainerFullName}} {{scope.ContainerReference}};
+            private readonly {{scope.TransientScopeInterfaceFullName}} {{scope.TransientScopeInterfaceReference}};
+            internal {{scope.Name}}({{scope.ContainerFullName}} {{scope.ContainerParameterReference}}, {{scope.TransientScopeInterfaceFullName}} {{scope.TransientScopeInterfaceParameterReference}})
+            {
+            {{scope.ContainerReference}} = {{scope.ContainerParameterReference}};
+            {{scope.TransientScopeInterfaceReference}} = {{scope.TransientScopeInterfaceParameterReference}};
+            }
+            """);
 
         GenerateRangeNodeContent(scope);
 
@@ -137,30 +132,34 @@ internal {{scope.Name}}({{scope.ContainerFullName}} {{scope.ContainerParameterRe
 
     public void VisitITransientScopeNode(ITransientScopeNode transientScope)
     {
-        var disposableImplementation = transientScope.DisposalType.HasFlag(DisposalType.Async) 
-            ? $", {_wellKnownTypes.IAsyncDisposable.FullName()}" 
-            : $", {_wellKnownTypes.IAsyncDisposable.FullName()}, {_wellKnownTypes.IDisposable.FullName()}";
-        
         _code.AppendLine($$"""
-private sealed partial class {{transientScope.Name}} : {{transientScope.TransientScopeInterfaceName}}{{disposableImplementation}}
-{
-private readonly {{transientScope.ContainerFullName}} {{transientScope.ContainerReference}};
-internal {{transientScope.Name}}({{transientScope.ContainerFullName}} {{transientScope.ContainerParameterReference}})
-{
-{{transientScope.ContainerReference}} = {{transientScope.ContainerParameterReference}};
-}
-""");
+            private sealed partial class {{transientScope.Name}} : {{transientScope.TransientScopeInterfaceName}}, {{GenerateDisposalInterfaceAssignments(transientScope.DisposalType)}}
+            {
+            private readonly {{transientScope.ContainerFullName}} {{transientScope.ContainerReference}};
+            internal {{transientScope.Name}}({{transientScope.ContainerFullName}} {{transientScope.ContainerParameterReference}})
+            {
+            {{transientScope.ContainerReference}} = {{transientScope.ContainerParameterReference}};
+            }
+            """);
 
         GenerateRangeNodeContent(transientScope);
 
         _code.AppendLine("}");
     }
+    
+    private string GenerateDisposalInterfaceAssignments(DisposalType disposalType) =>
+        (_wellKnownTypes.IAsyncDisposable, disposalType.HasFlag(DisposalType.Async)) switch
+        {
+            (null, _) => $"{_wellKnownTypes.IDisposable.FullName()}",
+            (_, true) => $"{_wellKnownTypes.IAsyncDisposable.FullName()}",
+            (_, false) => $"{_wellKnownTypes.IAsyncDisposable.FullName()}, {_wellKnownTypes.IDisposable.FullName()}"
+        };
 
     public void VisitIScopeCallNode(IScopeCallNode scopeCall)
     {
         _code.AppendLine(
             $"{scopeCall.ScopeFullName} {scopeCall.ScopeReference} = new {scopeCall.ScopeFullName}({scopeCall.ContainerParameter}, {scopeCall.TransientScopeInterfaceParameter});");
-        if (scopeCall.DisposalType.HasFlag(DisposalType.Async))
+        if (scopeCall.DisposalType.HasFlag(DisposalType.Async) && _wellKnownTypes.IAsyncDisposable is not null)
             _code.AppendLine($"{scopeCall.DisposableCollectionReference}.Add(({_wellKnownTypes.IAsyncDisposable.FullName()}) {scopeCall.ScopeReference});");
         else if (scopeCall.DisposalType.HasFlag(DisposalType.Sync))
             _code.AppendLine($"{scopeCall.DisposableCollectionReference}.Add(({_wellKnownTypes.IDisposable.FullName()}) {scopeCall.ScopeReference});");
@@ -174,7 +173,7 @@ internal {{transientScope.Name}}({{transientScope.ContainerFullName}} {{transien
             $"{transientScopeCall.TransientScopeFullName} {transientScopeCall.TransientScopeReference} = new {transientScopeCall.TransientScopeFullName}({transientScopeCall.ContainerParameter});");
         if (transientScopeCall.DisposalType is not DisposalType.None)
         {
-            var disposalType = transientScopeCall.DisposalType.HasFlag(DisposalType.Async) 
+            var disposalType = transientScopeCall.DisposalType.HasFlag(DisposalType.Async) && _wellKnownTypes.IAsyncDisposable is not null
                 ? _wellKnownTypes.IAsyncDisposable.FullName()
                 : _wellKnownTypes.IDisposable.FullName();
             var owner = transientScopeCall.ContainerReference is { } containerReference
@@ -210,25 +209,67 @@ internal {{transientScope.Name}}({{transientScope.ContainerFullName}} {{transien
         
         foreach (var createFunctionNode in rangeNode.CreateFunctions)
             VisitICreateFunctionNodeBase(createFunctionNode);
+        
+        if (rangeNode.HasGenericRangeInstanceFunctionGroups)
+            _code.AppendLine($"private readonly {_wellKnownTypes.ConcurrentDictionaryOfRuntimeTypeHandleToObject.FullName()} {rangeNode.RangedInstanceStorageFieldName} = new {_wellKnownTypes.ConcurrentDictionaryOfRuntimeTypeHandleToObject.FullName()}();");
 
         foreach (var rangedInstanceFunctionGroup in rangeNode.RangedInstanceFunctionGroups)
             VisitIRangedInstanceFunctionGroupNode(rangedInstanceFunctionGroup);
 
-        foreach (var multiFunctionNode in rangeNode.MultiFunctions)
-            VisitIMultiFunctionNode(multiFunctionNode);
+        foreach (var multiFunctionNodeBase in rangeNode.MultiFunctions)
+            switch (multiFunctionNodeBase)
+            {
+                case IMultiFunctionNode multiFunctionNode:
+                    VisitIMultiFunctionNode(multiFunctionNode);
+                    break;
+                case IMultiKeyValueFunctionNode multiKeyValueFunctionNode:
+                    VisitIMultiKeyValueFunctionNode(multiKeyValueFunctionNode);
+                    break;
+                case IMultiKeyValueMultiFunctionNode multiKeyValueMultiFunctionNode:
+                    VisitIMultiKeyValueMultiFunctionNode(multiKeyValueMultiFunctionNode);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(multiFunctionNodeBase));
+            }
         
-        if (rangeNode is { AddForDisposal: true, DisposalHandling.SyncCollectionReference: { } syncCollectionReference })
-            _code.AppendLine($$"""
-private partial void {{Constants.UserDefinedAddForDisposal}}({{_wellKnownTypes.IDisposable.FullName()}} disposable) =>
-{{syncCollectionReference}}.Add(({{_wellKnownTypes.IDisposable.FullName()}}) disposable);
-""");
+        if (rangeNode is { AddForDisposal: { } addForDisposal, DisposalHandling.SyncCollectionReference: { } syncCollectionReference })
+            GenerateAddForDisposal(
+                addForDisposal,
+                Constants.UserDefinedAddForDisposal,
+                _wellKnownTypes.IDisposable.FullName(),
+                "disposable",
+                syncCollectionReference);
 
-        if (rangeNode is { AddForDisposalAsync: true, DisposalHandling.AsyncCollectionReference: { } asyncCollectionReference })
-            _code.AppendLine($$"""
-private partial void {{Constants.UserDefinedAddForDisposalAsync}}({{_wellKnownTypes.IAsyncDisposable.FullName()}} asyncDisposable) =>
-{{asyncCollectionReference}}.Add(({{_wellKnownTypes.IAsyncDisposable.FullName()}}) asyncDisposable);
-""");
+        if (rangeNode is { AddForDisposalAsync: { } addForDisposalAsync, DisposalHandling.AsyncCollectionReference: { } asyncCollectionReference }
+            && _wellKnownTypes.IAsyncDisposable is not null)
+            GenerateAddForDisposal(
+                addForDisposalAsync,
+                Constants.UserDefinedAddForDisposalAsync,
+                _wellKnownTypes.IAsyncDisposable.FullName(),
+                "asyncDisposable",
+                asyncCollectionReference);
+        
         GenerateDisposalFunction(rangeNode);
+        return;
+
+        void GenerateAddForDisposal(
+            IMethodSymbol addForDisposalMethod, 
+            string methodName,
+            string disposableFullName, 
+            string disposableParameterName, 
+            string collectionReference)
+        {
+            var declaredAccessibility =
+                addForDisposalMethod.DeclaredAccessibility == Accessibility.Private ? "private" : "protected";
+            var virtualModifier = addForDisposalMethod.IsVirtual ? "virtual " : "";
+            var overrideModifier = addForDisposalMethod.IsOverride ? "override " : "";
+            var sealedModifier = addForDisposalMethod.IsSealed ? "sealed " : "";
+            _code.AppendLine(
+                $$"""
+                  {{declaredAccessibility}} {{sealedModifier}}{{virtualModifier}}{{overrideModifier}}partial void {{methodName}}({{disposableFullName}} {{disposableParameterName}}) =>
+                  {{collectionReference}}.Add(({{disposableFullName}}) {{disposableParameterName}});
+                  """);
+        }
     }
 
     private void VisitICreateFunctionNodeBase(ICreateFunctionNodeBase element)
@@ -253,24 +294,25 @@ private partial void {{Constants.UserDefinedAddForDisposalAsync}}({{_wellKnownTy
         IRangeNode range)
     {
         var disposalHandling = range.DisposalHandling;
+        
+        if (_wellKnownTypes.ConcurrentBagOfAsyncDisposable is not null)
+            _code.AppendLine($"private {_wellKnownTypes.ConcurrentBagOfAsyncDisposable.FullName()} {disposalHandling.AsyncCollectionReference} = new {_wellKnownTypes.ConcurrentBagOfAsyncDisposable.FullName()}();");
 
         _code.AppendLine($$"""
-private {{_wellKnownTypes.ConcurrentBagOfAsyncDisposable.FullName()}} {{disposalHandling.AsyncCollectionReference}} = new {{_wellKnownTypes.ConcurrentBagOfAsyncDisposable.FullName()}}();
-private {{_wellKnownTypes.ConcurrentBagOfSyncDisposable.FullName()}} {{disposalHandling.SyncCollectionReference}} = new {{_wellKnownTypes.ConcurrentBagOfSyncDisposable.FullName()}}();
-private int {{disposalHandling.DisposedFieldReference}} = 0;
-private bool {{disposalHandling.DisposedPropertyReference}} => {{disposalHandling.DisposedFieldReference}} != 0;
-""");
+            private {{_wellKnownTypes.ConcurrentBagOfSyncDisposable.FullName()}} {{disposalHandling.SyncCollectionReference}} = new {{_wellKnownTypes.ConcurrentBagOfSyncDisposable.FullName()}}();
+            private int {{disposalHandling.DisposedFieldReference}} = 0;
+            private bool {{disposalHandling.DisposedPropertyReference}} => {{disposalHandling.DisposedFieldReference}} != 0;
+            """);
         
         // Async part
         
-        GenerateDisposalFunctionInner(DisposalType.Async);
+        if (range.DisposalType.HasFlag(DisposalType.Async) && _wellKnownTypes.IAsyncDisposable is not null)
+            GenerateDisposalFunctionInner(DisposalType.Async);
         
         // Sync part
 
-        if (!range.DisposalType.HasFlag(DisposalType.Async))
-        {
+        if (!range.DisposalType.HasFlag(DisposalType.Async) || _wellKnownTypes.IAsyncDisposable is null)
             GenerateDisposalFunctionInner(DisposalType.Sync);
-        }
 
         void GenerateDisposalFunctionInner(DisposalType type)
         {
@@ -293,20 +335,20 @@ private bool {{disposalHandling.DisposedPropertyReference}} => {{disposalHandlin
             var listOfExceptionsFullName = _wellKnownTypesCollections.List1.Construct(_wellKnownTypes.Exception).FullName();
 
             _code.AppendLine($$"""
-public {{returnType}} Dispose{{functionNameSuffix}}()
-{
-var {{disposalHandling.DisposedLocalReference}} = global::System.Threading.Interlocked.Exchange(ref {{disposalHandling.DisposedFieldReference}}, 1);
-if ({{disposalHandling.DisposedLocalReference}} != 0) return;
-{{listOfExceptionsFullName}} {{disposalHandling.AggregateExceptionReference}} = new {{listOfExceptionsFullName}}();
-""");
+                public {{returnType}} Dispose{{functionNameSuffix}}()
+                {
+                var {{disposalHandling.DisposedLocalReference}} = global::System.Threading.Interlocked.Exchange(ref {{disposalHandling.DisposedFieldReference}}, 1);
+                if ({{disposalHandling.DisposedLocalReference}} != 0) return;
+                {{listOfExceptionsFullName}} {{disposalHandling.AggregateExceptionReference}} = new {{listOfExceptionsFullName}}();
+                """);
 
             foreach (var rangedInstanceFunctionGroup in range.RangedInstanceFunctionGroups)
                 _code.AppendLine($"{awaitPrefix}{rangedInstanceFunctionGroup.LockReference}.Wait{functionNameSuffix}();");
 
             _code.AppendLine("""
-try
-{
-""");
+                try
+                {
+                """);
 
             switch (range)
             {
@@ -316,27 +358,27 @@ try
                         ? $"await {elementName}.DisposeAsync();"
                         : $"({elementName} as {_wellKnownTypes.IDisposable.FullName()})?.Dispose();";
                     _code.AppendLine($$"""
-while ({{container.TransientScopeDisposalReference}}.Count > 0)
-{
-var {{elementName}} = {{_wellKnownTypesCollections.Enumerable}}.FirstOrDefault({{container.TransientScopeDisposalReference}}.Keys);
-if ({{elementName}} is not null && {{container.TransientScopeDisposalReference}}.TryRemove({{elementName}}, out _))
-{
-try
-{
-{{asyncTransientScopeDisposalInstruction}}
-}
-catch({{_wellKnownTypes.Exception.FullName()}} {{disposalHandling.AggregateExceptionItemReference}})
-{
-// catch and aggregate so other disposals are triggered
-{{disposalHandling.AggregateExceptionReference}}.Add({{disposalHandling.AggregateExceptionItemReference}});
-}
-}
-}
-{{container.TransientScopeDisposalReference}}.Clear();
-""");
+                        while ({{container.TransientScopeDisposalReference}}.Count > 0)
+                        {
+                        var {{elementName}} = {{_wellKnownTypesCollections.Enumerable}}.FirstOrDefault({{container.TransientScopeDisposalReference}}.Keys);
+                        if ({{elementName}} is not null && {{container.TransientScopeDisposalReference}}.TryRemove({{elementName}}, out _))
+                        {
+                        try
+                        {
+                        {{asyncTransientScopeDisposalInstruction}}
+                        }
+                        catch({{_wellKnownTypes.Exception.FullName()}} {{disposalHandling.AggregateExceptionItemReference}})
+                        {
+                        // catch and aggregate so other disposals are triggered
+                        {{disposalHandling.AggregateExceptionReference}}.Add({{disposalHandling.AggregateExceptionItemReference}});
+                        }
+                        }
+                        }
+                        {{container.TransientScopeDisposalReference}}.Clear();
+                        """);
                     break;
                 case ITransientScopeNode transientScope:
-                    var disposalType = transientScope.DisposalType.HasFlag(DisposalType.Async) 
+                    var disposalType = transientScope.DisposalType.HasFlag(DisposalType.Async) && _wellKnownTypes.IAsyncDisposable is not null
                         ? _wellKnownTypes.IAsyncDisposable.FullName() 
                         : _wellKnownTypes.IDisposable.FullName();
 
@@ -346,63 +388,54 @@ catch({{_wellKnownTypes.Exception.FullName()}} {{disposalHandling.AggregateExcep
             }
 
             _code.AppendLine($$"""
-while({{disposalHandling.AsyncCollectionReference}}.Count > 0 && {{disposalHandling.AsyncCollectionReference}}.TryTake(out var {{disposalHandling.DisposableLocalReference}}))
-{
-try
-{
-{{asyncDisposalInstruction}}
-}
-catch({{_wellKnownTypes.Exception.FullName()}} {{disposalHandling.AggregateExceptionItemReference}})
-{
-// catch and aggregate so other disposals are triggered
-{{disposalHandling.AggregateExceptionReference}}.Add({{disposalHandling.AggregateExceptionItemReference}});
-}
-}
-while({{disposalHandling.SyncCollectionReference}}.Count > 0 && {{disposalHandling.SyncCollectionReference}}.TryTake(out var {{disposalHandling.DisposableLocalReference}}))
-{
-try
-{
-{{disposalHandling.DisposableLocalReference}}.Dispose();
-}
-catch({{_wellKnownTypes.Exception.FullName()}} {{disposalHandling.AggregateExceptionItemReference}})
-{
-// catch and aggregate so other disposals are triggered
-{{disposalHandling.AggregateExceptionReference}}.Add({{disposalHandling.AggregateExceptionItemReference}});
-}
-}
-}
-finally
-{
-""");
+                while({{disposalHandling.AsyncCollectionReference}}.Count > 0 && {{disposalHandling.AsyncCollectionReference}}.TryTake(out var {{disposalHandling.DisposableLocalReference}}))
+                {
+                try
+                {
+                {{asyncDisposalInstruction}}
+                }
+                catch({{_wellKnownTypes.Exception.FullName()}} {{disposalHandling.AggregateExceptionItemReference}})
+                {
+                // catch and aggregate so other disposals are triggered
+                {{disposalHandling.AggregateExceptionReference}}.Add({{disposalHandling.AggregateExceptionItemReference}});
+                }
+                }
+                while({{disposalHandling.SyncCollectionReference}}.Count > 0 && {{disposalHandling.SyncCollectionReference}}.TryTake(out var {{disposalHandling.DisposableLocalReference}}))
+                {
+                try
+                {
+                {{disposalHandling.DisposableLocalReference}}.Dispose();
+                }
+                catch({{_wellKnownTypes.Exception.FullName()}} {{disposalHandling.AggregateExceptionItemReference}})
+                {
+                // catch and aggregate so other disposals are triggered
+                {{disposalHandling.AggregateExceptionReference}}.Add({{disposalHandling.AggregateExceptionItemReference}});
+                }
+                }
+                }
+                finally
+                {
+                """);
 
             foreach (var rangedInstanceFunctionGroup in range.RangedInstanceFunctionGroups)
                 _code.AppendLine($"{rangedInstanceFunctionGroup.LockReference}.Release();");
 
             _code.AppendLine($$"""
-}
-if ({{disposalHandling.AggregateExceptionReference}}.Count == 1) throw {{disposalHandling.AggregateExceptionReference}}[0];
-else if ({{disposalHandling.AggregateExceptionReference}}.Count > 1) throw new {{_wellKnownTypes.AggregateException}}({{disposalHandling.AggregateExceptionReference}});
-}
-""");
+                }
+                if ({{disposalHandling.AggregateExceptionReference}}.Count == 1) throw {{disposalHandling.AggregateExceptionReference}}[0];
+                else if ({{disposalHandling.AggregateExceptionReference}}.Count > 1) throw new {{_wellKnownTypes.AggregateException}}({{disposalHandling.AggregateExceptionReference}});
+                }
+                """);
         }
     }
 
     private void VisitISingleFunctionNode(ISingleFunctionNode singleFunction, bool doDisposedChecks)
     {
-        var accessibility = singleFunction is { Accessibility: { } acc, ExplicitInterfaceFullName: null }
-            ? $"{SyntaxFacts.GetText(acc)} "  
-            : "";
-        var asyncModifier = singleFunction.SynchronicityDecision is SynchronicityDecision.AsyncTask or SynchronicityDecision.AsyncValueTask
-            ? "async "
-            : "";
-        var explicitInterfaceFullName = singleFunction.ExplicitInterfaceFullName is { } interfaceName
-            ? $"{interfaceName}."
-            : "";
-        var parameter = string.Join(",", singleFunction.Parameters.Select(r => $"{r.Node.TypeFullName} {r.Node.Reference}"));
         _code.AppendLine($$"""
-{{accessibility}}{{asyncModifier}}{{explicitInterfaceFullName}}{{singleFunction.ReturnedTypeFullName}} {{singleFunction.Name}}({{parameter}})
-{
-""");
+            {{GenerateMethodDeclaration(singleFunction)}}
+            {
+            """);
+        
         if (doDisposedChecks)
             ObjectDisposedCheck(
                 singleFunction.DisposedPropertyReference, 
@@ -440,72 +473,185 @@ else if ({{disposalHandling.AggregateExceptionReference}}.Count > 1) throw new {
 
     public void VisitIRangedInstanceFunctionGroupNode(IRangedInstanceFunctionGroupNode rangedInstanceFunctionGroupNode)
     {
-        var isRefType = rangedInstanceFunctionGroupNode.IsCreatedForStructs is null;
-        _code.AppendLine($$"""
-private {{rangedInstanceFunctionGroupNode.TypeFullName}}{{(isRefType ? "?" : "")}} {{rangedInstanceFunctionGroupNode.FieldReference}};
-private {{_wellKnownTypes.SemaphoreSlim.FullName()}} {{rangedInstanceFunctionGroupNode.LockReference}} = new {{_wellKnownTypes.SemaphoreSlim.FullName()}}(1);
-""");
+        if (rangedInstanceFunctionGroupNode.IsOpenGeneric)
+            Generic();
+        else if (rangedInstanceFunctionGroupNode.IsCreatedForStructs is null)
+            RefLike();
+        else
+            Struct();
 
-        if (!isRefType) _code.AppendLine($"private bool {rangedInstanceFunctionGroupNode.IsCreatedForStructs};");
-
-        foreach (var overload in rangedInstanceFunctionGroupNode.Overloads)
+        void Generic()
         {
-            var isAsync =
-                overload.SynchronicityDecision is SynchronicityDecision.AsyncTask or SynchronicityDecision.AsyncValueTask;
-            var parameters = string.Join(", ",
-                overload.Parameters.Select(p => $"{p.Node.TypeFullName} {p.Node.Reference}"));
-            _code.AppendLine(rangedInstanceFunctionGroupNode.Level == ScopeLevel.TransientScope && overload.ExplicitInterfaceFullName is {} explicitInterfaceFullName
-                ? $"{(isAsync ? "async " : "")}{overload.ReturnedTypeFullName} {explicitInterfaceFullName}.{overload.Name}({parameters})"
-                : $"{Constants.PrivateKeyword} {(isAsync ? "async " : "")}{overload.ReturnedTypeFullName} {overload.Name}({parameters})");
+            _code.AppendLine($$"""
+               private {{_wellKnownTypes.SemaphoreSlim.FullName()}} {{rangedInstanceFunctionGroupNode.LockReference}} = new {{_wellKnownTypes.SemaphoreSlim.FullName()}}(1);
+               """);
+            var typeHandleField = _referenceGenerator.Generate("typeHandle");
 
-            var checkAndReturnAlreadyCreatedInstance = isRefType
-                ? $"if (!object.ReferenceEquals({rangedInstanceFunctionGroupNode.FieldReference}, null)) return {rangedInstanceFunctionGroupNode.FieldReference};"
-                : $"if ({rangedInstanceFunctionGroupNode.IsCreatedForStructs}) return {rangedInstanceFunctionGroupNode.FieldReference};";
-            
-            _code.AppendLine($$"""
-{
-{{checkAndReturnAlreadyCreatedInstance}}
-{{(isAsync ? "await " : "")}}{{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.LockReference}}.Wait{{(isAsync ? "Async" : "")}}();
-try
-{
-""");
-            
-            ObjectDisposedCheck(
-                overload.DisposedPropertyReference, 
-                overload.RangeFullName, 
-                overload.ReturnedTypeFullName);
-            _code.AppendLine(checkAndReturnAlreadyCreatedInstance);
-            
-            VisitIElementNode(overload.ReturnedElement);
+            foreach (var overload in rangedInstanceFunctionGroupNode.Overloads)
+            {
+                _code.AppendLine(GenerateMethodDeclaration(overload));
+                
+                var instance0 = _referenceGenerator.Generate("instance");
+                var instance1 = _referenceGenerator.Generate("instance");
+                
+                var isAsync =
+                    overload.SynchronicityDecision is SynchronicityDecision.AsyncTask or SynchronicityDecision.AsyncValueTask;
+                _code.AppendLine($$"""
+                    {
+                    var {{typeHandleField}} = typeof({{overload.ReturnedElement.TypeFullName}}).TypeHandle;
+                    if ({{rangedInstanceFunctionGroupNode.RangedInstanceStorageFieldName}}.TryGetValue({{typeHandleField}}, out {{_wellKnownTypes.Object.FullName()}}? {{instance0}}) && {{instance0}} is {{overload.ReturnedElement.TypeFullName}} {{instance1}}) return {{instance1}};
+                    {{(isAsync ? "await " : "")}}{{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.LockReference}}.Wait{{(isAsync ? "Async" : "")}}();
+                    try
+                    {
+                    """);
+                
+                ObjectDisposedCheck(
+                    overload.DisposedPropertyReference, 
+                    overload.RangeFullName, 
+                    overload.ReturnedTypeFullName);
+                
+                var instance2 = _referenceGenerator.Generate("instance");
+                var instance3 = _referenceGenerator.Generate("instance");
+                _code.AppendLine(
+                    $"if ({rangedInstanceFunctionGroupNode.RangedInstanceStorageFieldName}.TryGetValue({typeHandleField}, out {_wellKnownTypes.Object.FullName()}? {instance2}) && {instance2} is {overload.ReturnedElement.TypeFullName} {instance3}) return {instance3};");
+                
+                VisitIElementNode(overload.ReturnedElement);
 
-            _code.AppendLine($"{rangedInstanceFunctionGroupNode.FieldReference} = {overload.ReturnedElement.Reference};");
-            if (!isRefType) _code.AppendLine($"{rangedInstanceFunctionGroupNode.IsCreatedForStructs} = true;");
+                _code.AppendLine($"{rangedInstanceFunctionGroupNode.RangedInstanceStorageFieldName}[{typeHandleField}] = {overload.ReturnedElement.Reference};");
+                
+                ObjectDisposedCheck(
+                    overload.DisposedPropertyReference, 
+                    overload.RangeFullName, 
+                    overload.ReturnedTypeFullName);
+                
+                _code.AppendLine($$"""
+                    return {{overload.ReturnedElement.Reference}};
+                    }
+                    finally
+                    {
+                    {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.LockReference}}.Release();
+                    }
+                    """);
+                foreach (var localFunction in overload.LocalFunctions)
+                    VisitISingleFunctionNode(localFunction, true);
+                _code.AppendLine("}");
+            }
+        }
+
+        void RefLike()
+        {
             _code.AppendLine($$"""
-}
-finally
-{
-{{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.LockReference}}.Release();
-}
-""");
+                private {{rangedInstanceFunctionGroupNode.TypeFullName}}? {{rangedInstanceFunctionGroupNode.FieldReference}};
+                private {{_wellKnownTypes.SemaphoreSlim.FullName()}} {{rangedInstanceFunctionGroupNode.LockReference}} = new {{_wellKnownTypes.SemaphoreSlim.FullName()}}(1);
+                """);
+
+            foreach (var overload in rangedInstanceFunctionGroupNode.Overloads)
+            {
+                _code.AppendLine(GenerateMethodDeclaration(overload));
+
+                var checkAndReturnAlreadyCreatedInstance = $"if (!{_wellKnownTypes.Object.FullName()}.ReferenceEquals({rangedInstanceFunctionGroupNode.FieldReference}, null)) return {rangedInstanceFunctionGroupNode.FieldReference};";
+                
+                var isAsync =
+                    overload.SynchronicityDecision is SynchronicityDecision.AsyncTask or SynchronicityDecision.AsyncValueTask;
+                _code.AppendLine($$"""
+                    {
+                    {{checkAndReturnAlreadyCreatedInstance}}
+                    {{(isAsync ? "await " : "")}}{{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.LockReference}}.Wait{{(isAsync ? "Async" : "")}}();
+                    try
+                    {
+                    """);
+                
+                ObjectDisposedCheck(
+                    overload.DisposedPropertyReference, 
+                    overload.RangeFullName, 
+                    overload.ReturnedTypeFullName);
+                _code.AppendLine(checkAndReturnAlreadyCreatedInstance);
+                
+                VisitIElementNode(overload.ReturnedElement);
+
+                _code.AppendLine($$"""
+                    {{rangedInstanceFunctionGroupNode.FieldReference}} = {{overload.ReturnedElement.Reference}};
+                    }
+                    finally
+                    {
+                    {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.LockReference}}.Release();
+                    }
+                    """);
             
-            ObjectDisposedCheck(
-                overload.DisposedPropertyReference, 
-                overload.RangeFullName, 
-                overload.ReturnedTypeFullName);
+                ObjectDisposedCheck(
+                    overload.DisposedPropertyReference, 
+                    overload.RangeFullName, 
+                    overload.ReturnedTypeFullName);
+                _code.AppendLine($"return {Constants.ThisKeyword}.{rangedInstanceFunctionGroupNode.FieldReference};");
+                foreach (var localFunction in overload.LocalFunctions)
+                    VisitISingleFunctionNode(localFunction, true);
+                _code.AppendLine("}");
+            }
+        }
+
+        void Struct()
+        {
             _code.AppendLine($$"""
-return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReference}};
-""");
-            foreach (var localFunction in overload.LocalFunctions)
-                VisitISingleFunctionNode(localFunction, true);
-            _code.AppendLine("}");
+                private {{rangedInstanceFunctionGroupNode.TypeFullName}} {{rangedInstanceFunctionGroupNode.FieldReference}};
+                private {{_wellKnownTypes.SemaphoreSlim.FullName()}} {{rangedInstanceFunctionGroupNode.LockReference}} = new {{_wellKnownTypes.SemaphoreSlim.FullName()}}(1);
+                """);
+
+            _code.AppendLine($"private bool {rangedInstanceFunctionGroupNode.IsCreatedForStructs};");
+
+            foreach (var overload in rangedInstanceFunctionGroupNode.Overloads)
+            {
+                _code.AppendLine(GenerateMethodDeclaration(overload));
+
+                var checkAndReturnAlreadyCreatedInstance = $"if ({rangedInstanceFunctionGroupNode.IsCreatedForStructs}) return {rangedInstanceFunctionGroupNode.FieldReference};";
+                
+                var isAsync =
+                    overload.SynchronicityDecision is SynchronicityDecision.AsyncTask or SynchronicityDecision.AsyncValueTask;
+                _code.AppendLine($$"""
+                    {
+                    {{checkAndReturnAlreadyCreatedInstance}}
+                    {{(isAsync ? "await " : "")}}{{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.LockReference}}.Wait{{(isAsync ? "Async" : "")}}();
+                    try
+                    {
+                    """);
+            
+                ObjectDisposedCheck(
+                    overload.DisposedPropertyReference, 
+                    overload.RangeFullName, 
+                    overload.ReturnedTypeFullName);
+                _code.AppendLine(checkAndReturnAlreadyCreatedInstance);
+                
+                VisitIElementNode(overload.ReturnedElement);
+
+                _code.AppendLine($$"""
+                    {{rangedInstanceFunctionGroupNode.FieldReference}} = {{overload.ReturnedElement.Reference}};
+                    {{rangedInstanceFunctionGroupNode.IsCreatedForStructs}} = true;
+                    }
+                    finally
+                    {
+                    {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.LockReference}}.Release();
+                    }
+                    """);
+            
+                ObjectDisposedCheck(
+                    overload.DisposedPropertyReference, 
+                    overload.RangeFullName, 
+                    overload.ReturnedTypeFullName);
+                _code.AppendLine($"return {Constants.ThisKeyword}.{rangedInstanceFunctionGroupNode.FieldReference};");
+                foreach (var localFunction in overload.LocalFunctions)
+                    VisitISingleFunctionNode(localFunction, true);
+                _code.AppendLine("}");
+            }
         }
     }
 
-    public void VisitIAsyncFunctionCallNode(IAsyncFunctionCallNode functionCallNode)
+    public void VisitIWrappedAsyncFunctionCallNode(IWrappedAsyncFunctionCallNode functionCallNode)
     {
         var owner = functionCallNode.OwnerReference is { } ownerReference ? $"{ownerReference}." : ""; 
         var typeFullName = functionCallNode.TypeFullName;
-        var call = $"{owner}{functionCallNode.FunctionName}({string.Join(", ", functionCallNode.Parameters.Select(p => $"{p.Item1.Reference.PrefixAtIfKeyword()}: {p.Item2.Reference}"))})";
+        var typeParameters = functionCallNode.TypeParameters.Any()
+            ? $"<{string.Join(", ", functionCallNode.TypeParameters.Select(p => p.Name))}>"
+            : "";
+        var call = $"{owner}{functionCallNode.FunctionName}{typeParameters}({string.Join(", ", functionCallNode.Parameters.Select(p => $"{p.Item1.Reference.PrefixAtIfKeyword()}: {p.Item2.Reference}"))})";
         call = functionCallNode.Transformation switch
         {
             AsyncFunctionCallTransformation.ValueTaskFromValueTask => call,
@@ -523,7 +669,10 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
     {
         var owner = functionCallNode.OwnerReference is { } ownerReference ? $"{ownerReference}." : ""; 
         var typeFullName = functionCallNode.TypeFullName;
-        var call = $"{owner}{functionCallNode.FunctionName}({string.Join(", ", functionCallNode.Parameters.Select(p => $"{p.Item1.Reference.PrefixAtIfKeyword()}: {p.Item2.Reference}"))})";
+        var typeParameters = functionCallNode.TypeParameters.Any()
+            ? $"<{string.Join(", ", functionCallNode.TypeParameters.Select(p => p.Name))}>"
+            : "";
+        var call = $"{owner}{functionCallNode.FunctionName}{typeParameters}({string.Join(", ", functionCallNode.Parameters.Select(p => $"{p.Item1.Reference.PrefixAtIfKeyword()}: {p.Item2.Reference}"))})";
         call = functionCallNode.Awaited ? $"(await {call})" : call;
         _code.AppendLine($"{typeFullName} {functionCallNode.Reference} = ({typeFullName}){call};");
     }
@@ -567,6 +716,15 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
 
     public void VisitILazyNode(ILazyNode lazyNode) => 
         _code.AppendLine($"{lazyNode.TypeFullName} {lazyNode.Reference} = new {lazyNode.TypeFullName}({lazyNode.MethodGroup});");
+    
+    public void VisitIThreadLocalNode(IThreadLocalNode threadLocalNode)
+    {
+        _code.AppendLine(
+            $"{threadLocalNode.TypeFullName} {threadLocalNode.Reference} = new {threadLocalNode.TypeFullName}({threadLocalNode.MethodGroup}, false);");
+        if (threadLocalNode.SyncDisposalCollectionReference is {} syncDisposalCollectionReference)
+            _code.AppendLine(
+                $"{syncDisposalCollectionReference}.Add(({_wellKnownTypes.IDisposable.FullName()}) {threadLocalNode.Reference});");
+    }
 
     public void VisitITupleNode(ITupleNode tupleNode)
     {
@@ -600,8 +758,8 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
             case IPlainFunctionCallNode createCallNode:
                 VisitIPlainFunctionCallNode(createCallNode);
                 break;
-            case IAsyncFunctionCallNode asyncFunctionCallNode:
-                VisitIAsyncFunctionCallNode(asyncFunctionCallNode);
+            case IWrappedAsyncFunctionCallNode asyncFunctionCallNode:
+                VisitIWrappedAsyncFunctionCallNode(asyncFunctionCallNode);
                 break;
             case IScopeCallNode scopeCallNode:
                 VisitIScopeCallNode(scopeCallNode);
@@ -630,6 +788,9 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
             case ILazyNode lazyNode:
                 VisitILazyNode(lazyNode);
                 break;
+            case IThreadLocalNode threadLocalNode:
+                VisitIThreadLocalNode(threadLocalNode);
+                break;
             case ITupleNode tupleNode:
                 VisitITupleNode(tupleNode);
                 break;
@@ -654,14 +815,20 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
             case IReusedNode reusedNode:
                 VisitIReusedNode(reusedNode);
                 break;
+            case IKeyValueBasedNode keyValueBasedNode:
+                VisitIKeyValueBasedNode(keyValueBasedNode);
+                break;
+            case IKeyValuePairNode keyValuePairNode:
+                VisitIKeyValuePairNode(keyValuePairNode);
+                break;
         }
     }
 
     public void VisitIImplementationNode(IImplementationNode implementationNode)
     {
-        if (implementationNode.UserDefinedInjectionConstructor is {})
+        if (implementationNode.UserDefinedInjectionConstructor is not null)
             ProcessUserDefinedInjection(implementationNode.UserDefinedInjectionConstructor);
-        if (implementationNode.UserDefinedInjectionProperties is {})
+        if (implementationNode.UserDefinedInjectionProperties is not null)
             ProcessUserDefinedInjection(implementationNode.UserDefinedInjectionProperties);
         foreach (var (_, element) in implementationNode.ConstructorParameters)
             VisitIElementNode(element);
@@ -681,13 +848,13 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
         if (implementationNode.SyncDisposalCollectionReference is {} syncDisposalCollectionReference)
             _code.AppendLine(
                 $"{syncDisposalCollectionReference}.Add(({_wellKnownTypes.IDisposable.FullName()}) {implementationNode.Reference});");
-        if (implementationNode.AsyncDisposalCollectionReference is {} asyncDisposalCollectionReference)
+        if (implementationNode.AsyncDisposalCollectionReference is {} asyncDisposalCollectionReference && _wellKnownTypes.IAsyncDisposable is not null)
             _code.AppendLine(
                 $"{asyncDisposalCollectionReference}.Add(({_wellKnownTypes.IAsyncDisposable.FullName()}) {implementationNode.Reference});");
 
         if (implementationNode.Initializer is {} init)
         {
-            if (init.UserDefinedInjection is {})
+            if (init.UserDefinedInjection is not null)
                 ProcessUserDefinedInjection(init.UserDefinedInjection);
             foreach (var (_, element) in init.Parameters)
                 VisitIElementNode(element);
@@ -707,8 +874,11 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
         {
             foreach (var (_, element, _) in userDefinedInjection.Parameters)
                 VisitIElementNode(element);
+            var generics = userDefinedInjection.TypeParameters.Count > 0
+                ? $"<{string.Join(", ", userDefinedInjection.TypeParameters)}>"
+                : "";
             _code.AppendLine(
-                $"{userDefinedInjection.Name}({string.Join(", ", userDefinedInjection.Parameters.Select(p => $"{p.Name.PrefixAtIfKeyword()}: {(p.IsOut ? "out var " : "")} {p.Element.Reference}"))});");
+                $"{userDefinedInjection.Name}{generics}({string.Join(", ", userDefinedInjection.Parameters.Select(p => $"{p.Name.PrefixAtIfKeyword()}: {(p.IsOut ? "out var " : "")} {p.Element.Reference}"))});");
         }
     }
 
@@ -732,44 +902,37 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
     public void VisitINullNode(INullNode nullNode) => _code.AppendLine(
         $"{nullNode.TypeFullName} {nullNode.Reference} = ({nullNode.TypeFullName}) null;");
 
-    public void VisitIMultiFunctionNode(IMultiFunctionNode multiFunctionNode)
+    public void VisitIMultiFunctionNode(IMultiFunctionNode multiFunctionNode) =>
+        VisitIMultiFunctionNodeBase(multiFunctionNode);
+
+    private void VisitIMultiFunctionNodeBase(IMultiFunctionNodeBase multiFunctionNodeBase)
     {
-        var accessibility = multiFunctionNode is { Accessibility: { } acc, ExplicitInterfaceFullName: null }
-            ? $"{SyntaxFacts.GetText(acc)} "  
-            : "";
-        var asyncModifier = multiFunctionNode.SynchronicityDecision is SynchronicityDecision.AsyncTask or SynchronicityDecision.AsyncValueTask
-            || multiFunctionNode.IsAsyncEnumerable
-            ? "async "
-            : "";
-        var explicitInterfaceFullName = multiFunctionNode.ExplicitInterfaceFullName is { } interfaceName
-            ? $"{interfaceName}."
-            : "";
-        var parameter = string.Join(",", multiFunctionNode.Parameters.Select(r => $"{r.Node.TypeFullName} {r.Node.Reference}"));
         _code.AppendLine($$"""
-{{accessibility}}{{asyncModifier}}{{explicitInterfaceFullName}}{{multiFunctionNode.ReturnedTypeFullName}} {{multiFunctionNode.Name}}({{parameter}})
-{
-""");
+            {{GenerateMethodDeclaration(multiFunctionNodeBase)}}
+            {
+            """);
+        
         ObjectDisposedCheck(
-            multiFunctionNode.DisposedPropertyReference, 
-            multiFunctionNode.RangeFullName, 
-            multiFunctionNode.ReturnedTypeFullName);
-        foreach (var returnedElement in multiFunctionNode.ReturnedElements)
+            multiFunctionNodeBase.DisposedPropertyReference, 
+            multiFunctionNodeBase.RangeFullName, 
+            multiFunctionNodeBase.ReturnedTypeFullName);
+        foreach (var returnedElement in multiFunctionNodeBase.ReturnedElements)
         {
             VisitIElementNode(returnedElement);
             ObjectDisposedCheck(
-                multiFunctionNode.DisposedPropertyReference, 
-                multiFunctionNode.RangeFullName, 
-                multiFunctionNode.ReturnedTypeFullName);
-            if (multiFunctionNode.SynchronicityDecision == SynchronicityDecision.Sync)
+                multiFunctionNodeBase.DisposedPropertyReference, 
+                multiFunctionNodeBase.RangeFullName, 
+                multiFunctionNodeBase.ReturnedTypeFullName);
+            if (multiFunctionNodeBase.SynchronicityDecision == SynchronicityDecision.Sync)
                 _code.AppendLine($"yield return {returnedElement.Reference};");
         }
             
-        foreach (var localFunction in multiFunctionNode.LocalFunctions)
+        foreach (var localFunction in multiFunctionNodeBase.LocalFunctions)
             VisitISingleFunctionNode(localFunction, true);
         
-        _code.AppendLine(multiFunctionNode.SynchronicityDecision == SynchronicityDecision.Sync
+        _code.AppendLine(multiFunctionNodeBase.SynchronicityDecision == SynchronicityDecision.Sync
             ? "yield break;"
-            : $"return new {multiFunctionNode.ItemTypeFullName}[] {{ {string.Join(", ", multiFunctionNode.ReturnedElements.Select(re => re.Reference))} }};");
+            : $"return new {multiFunctionNodeBase.ItemTypeFullName}[] {{ {string.Join(", ", multiFunctionNodeBase.ReturnedElements.Select(re => re.Reference))} }};");
         
         _code.AppendLine("}");
     }
@@ -798,15 +961,18 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
                 _code.AppendLine(
                     $"{collectionTypeFullName} {collectionReference} = new {collectionTypeFullName}({_wellKnownTypesCollections.Enumerable}.ToArray({enumerableBasedNode.EnumerableCall.Reference}));");
                 break;
-            case EnumerableBasedType.ReadOnlyCollection
-                or EnumerableBasedType.IReadOnlyCollection
+            case EnumerableBasedType.ReadOnlyCollection:
+                _code.AppendLine(
+                    $"{collectionTypeFullName} {collectionReference} = new {collectionTypeFullName}({_wellKnownTypesCollections.Enumerable}.ToList({enumerableBasedNode.EnumerableCall.Reference}));");
+                break;
+            case EnumerableBasedType.IReadOnlyCollection
                 or EnumerableBasedType.IReadOnlyList
-                when enumerableBasedNode.CollectionData is ReadOnlyCollectionData
+                when enumerableBasedNode.CollectionData is ReadOnlyInterfaceCollectionData
                 {
-                    ConcreteReadOnlyCollectionTypeFullName: { } concreteReadOnlyCollectionTypeFullName
+                    ConcreteCollectionTypeFullName: { } concreteCollectionTypeFullName
                 }:
                 _code.AppendLine(
-                    $"{collectionTypeFullName} {collectionReference} = new {concreteReadOnlyCollectionTypeFullName}({_wellKnownTypesCollections.Enumerable}.ToList({enumerableBasedNode.EnumerableCall.Reference}));");
+                    $"{collectionTypeFullName} {collectionReference} = new {concreteCollectionTypeFullName}({_wellKnownTypesCollections.Enumerable}.ToList({enumerableBasedNode.EnumerableCall.Reference}));");
                 break;
             case EnumerableBasedType.ConcurrentBag
                 or EnumerableBasedType.ConcurrentQueue
@@ -851,20 +1017,10 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
 
     public void VisitIVoidFunctionNode(IVoidFunctionNode voidFunctionNode)
     {
-        var accessibility = voidFunctionNode is { Accessibility: { } acc, ExplicitInterfaceFullName: null }
-            ? $"{SyntaxFacts.GetText(acc)} "  
-            : "";
-        var asyncModifier = voidFunctionNode.SynchronicityDecision is SynchronicityDecision.AsyncTask or SynchronicityDecision.AsyncValueTask
-            ? "async "
-            : "";
-        var explicitInterfaceFullName = voidFunctionNode.ExplicitInterfaceFullName is { } interfaceName
-            ? $"{interfaceName}."
-            : "";
-        var parameter = string.Join(",", voidFunctionNode.Parameters.Select(r => $"{r.Node.TypeFullName} {r.Node.Reference}"));
         _code.AppendLine($$"""
-{{accessibility}}{{asyncModifier}}{{explicitInterfaceFullName}}{{voidFunctionNode.ReturnedTypeFullName}} {{voidFunctionNode.Name}}({{parameter}})
-{
-""");
+            {{GenerateMethodDeclaration(voidFunctionNode)}}
+            {
+            """);
         foreach (var (functionCallNode, initializedInstanceNode) in voidFunctionNode.Initializations)
         {
             VisitIElementNode(functionCallNode);
@@ -875,6 +1031,59 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
             VisitISingleFunctionNode(localFunction, true);
         
         _code.AppendLine("}");
+    }
+
+    public void VisitIMultiKeyValueFunctionNode(IMultiKeyValueFunctionNode multiKeyValueFunctionNode) =>
+        VisitIMultiFunctionNodeBase(multiKeyValueFunctionNode);
+
+    public void VisitIMultiKeyValueMultiFunctionNode(IMultiKeyValueMultiFunctionNode multiKeyValueMultiFunctionNode) =>
+        VisitIMultiFunctionNodeBase(multiKeyValueMultiFunctionNode);
+
+    public void VisitIKeyValueBasedNode(IKeyValueBasedNode keyValueBasedNode)
+    {
+        VisitIElementNode(keyValueBasedNode.EnumerableCall);
+        if (keyValueBasedNode is { Type: KeyValueBasedType.SingleIEnumerable or KeyValueBasedType.SingleIAsyncEnumerable }
+            || keyValueBasedNode.MapData is not
+            {
+                MapReference: { } mapReference, MapTypeFullName: { } mapTypeFullName
+            }) 
+            return;
+        switch (keyValueBasedNode.Type)
+        {
+            case KeyValueBasedType.SingleIDictionary 
+                or KeyValueBasedType.SingleIReadOnlyDictionary
+                or KeyValueBasedType.SingleDictionary:
+                _code.AppendLine(
+                    $"{mapTypeFullName} {mapReference} = {_wellKnownTypesCollections.Enumerable}.ToDictionary({keyValueBasedNode.EnumerableCall.Reference}, kvp => kvp.Key, kvp => kvp.Value);");
+                break;
+            case KeyValueBasedType.SingleReadOnlyDictionary 
+                or KeyValueBasedType.SingleSortedDictionary
+                or KeyValueBasedType.SingleSortedList:
+                _code.AppendLine(
+                    $"{mapTypeFullName} {mapReference} = new {mapTypeFullName}({_wellKnownTypesCollections.Enumerable}.ToDictionary({keyValueBasedNode.EnumerableCall.Reference}, kvp => kvp.Key, kvp => kvp.Value));");
+                break;
+            case KeyValueBasedType.SingleImmutableDictionary
+                or KeyValueBasedType.SingleImmutableSortedDictionary
+                when keyValueBasedNode.MapData is ImmutableMapData
+                {
+                    ImmutableUngenericTypeFullName: { } immutableUngenericTypeFullName
+                }:
+                _code.AppendLine(
+                    $"{mapTypeFullName} {mapReference} = {immutableUngenericTypeFullName}.CreateRange({keyValueBasedNode.EnumerableCall.Reference});");
+                break;
+        }
+    }
+
+    public void VisitIKeyValuePairNode(IKeyValuePairNode keyValuePairNode)
+    {
+        VisitIElementNode(keyValuePairNode.Value);
+        var keyLiteral = keyValuePairNode.KeyType.TypeKind == TypeKind.Enum 
+            ? $"({keyValuePairNode.KeyType.FullName()}) {SymbolDisplay.FormatPrimitive(keyValuePairNode.Key, true, false)}" 
+            : CustomSymbolEqualityComparer.Default.Equals(keyValuePairNode.KeyType, _wellKnownTypes.Type) 
+                ? $"typeof({(keyValuePairNode.Key as ITypeSymbol)?.FullName() ?? ""})" 
+                : SymbolDisplay.FormatPrimitive(keyValuePairNode.Key, true, false);
+        _code.AppendLine(
+            $"{keyValuePairNode.TypeFullName} {keyValuePairNode.Reference} = new {keyValuePairNode.TypeFullName}({keyLiteral}, {keyValuePairNode.Value.Reference});");
     }
 
     private readonly HashSet<IReusedNode> _doneReusedNodes = new();
@@ -892,4 +1101,52 @@ return {{Constants.ThisKeyword}}.{{rangedInstanceFunctionGroupNode.FieldReferenc
         string rangeFullName,
         string returnTypeFullName) => _code.AppendLine(
         $"if ({disposedPropertyReference}) throw new {_wellKnownTypes.ObjectDisposedException}(\"{rangeFullName}\", $\"[DIE] This scope \\\"{rangeFullName}\\\" is already disposed, so it can't create a \\\"{returnTypeFullName}\\\" instance anymore.\");");
+
+    private static string GenerateMethodDeclaration(IFunctionNode functionNode)
+    {
+        var accessibility = functionNode is { Accessibility: { } acc, ExplicitInterfaceFullName: null }
+            ? $"{SyntaxFacts.GetText(acc)} "  
+            : "";
+        var asyncModifier = 
+            functionNode.SynchronicityDecision is SynchronicityDecision.AsyncTask or SynchronicityDecision.AsyncValueTask 
+            || functionNode is IMultiFunctionNodeBase { IsAsyncEnumerable: true } 
+            ? "async "
+            : "";
+        var explicitInterfaceFullName = functionNode.ExplicitInterfaceFullName is { } interfaceName
+            ? $"{interfaceName}."
+            : "";
+        var typeParameters = "";
+        var typeParametersConstraints = "";
+        if (functionNode is IReturningFunctionNode returningFunctionNode && returningFunctionNode.TypeParameters.Any())
+        {
+            typeParameters = $"<{string.Join(", ", returningFunctionNode.TypeParameters.Select(p => p.Name))}>";
+            typeParametersConstraints = string.Join("", returningFunctionNode
+                .TypeParameters
+                .Where(p => p.HasValueTypeConstraint 
+                            || p.HasReferenceTypeConstraint
+                            || p.HasNotNullConstraint 
+                            || p.HasUnmanagedTypeConstraint
+                            || p.HasConstructorConstraint
+                            || p.ConstraintTypes.Length > 0)
+                .Select(p =>
+                {
+                    var constraints = new List<string>();
+                    if (p.HasUnmanagedTypeConstraint)
+                        constraints.Add("unmanaged");
+                    else if (p.HasValueTypeConstraint)
+                        constraints.Add("struct");
+                    else if (p.HasReferenceTypeConstraint)
+                        constraints.Add($"class{(p.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated ? "?" : "")}");
+                    if (p.HasNotNullConstraint)
+                        constraints.Add("notnull");
+                    constraints.AddRange(p.ConstraintTypes.Select((t, i) => t.WithNullableAnnotation(p.ConstraintNullableAnnotations[i]).FullName()));
+                    if (p.HasConstructorConstraint)
+                        constraints.Add("new()");
+                    return $"{Environment.NewLine}where {p.Name} : {string.Join(", ", constraints)}";
+                }));
+        }
+        
+        var parameters = string.Join(",", functionNode.Parameters.Select(r => $"{r.Node.TypeFullName} {r.Node.Reference}"));
+        return $"{accessibility}{asyncModifier}{functionNode.ReturnedTypeFullName} {explicitInterfaceFullName}{functionNode.Name}{typeParameters}({parameters}){typeParametersConstraints}";
+    }
 }

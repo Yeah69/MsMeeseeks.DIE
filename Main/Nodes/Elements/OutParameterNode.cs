@@ -1,5 +1,3 @@
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
 using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Elements;
@@ -8,7 +6,7 @@ internal interface IOutParameterNode : IElementNode
 {
 }
 
-internal partial class OutParameterNode : IOutParameterNode
+internal sealed partial class OutParameterNode : IOutParameterNode
 {
     internal OutParameterNode(
         ITypeSymbol type,
@@ -19,9 +17,7 @@ internal partial class OutParameterNode : IOutParameterNode
         Reference = referenceGenerator.Generate(type);
     }
 
-    public void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
-    {
-    }
+    public void Build(PassedContext passedContext) { }
 
     public string TypeFullName { get; }
     public string Reference { get; }

@@ -1,4 +1,3 @@
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
 
@@ -9,7 +8,7 @@ internal interface IValidateUserDefinedPropertiesMethod: IValidateUserDefinedInj
     
 }
 
-internal class ValidateUserDefinedPropertiesInjectionMethod : ValidateUserDefinedInjectionMethod, IValidateUserDefinedPropertiesMethod
+internal sealed class ValidateUserDefinedPropertiesInjectionMethod : ValidateUserDefinedInjectionMethod, IValidateUserDefinedPropertiesMethod
 {
     internal ValidateUserDefinedPropertiesInjectionMethod(
         IContainerWideContext containerWideContext,

@@ -1,11 +1,8 @@
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Logging;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
 using MsMeeseeks.DIE.Visitors;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Elements.Delegates;
 
@@ -23,8 +20,9 @@ internal abstract class DelegateBaseNode : IDelegateBaseNode
     private readonly ITypeSymbol _innerType;
 
     internal DelegateBaseNode(
-        INamedTypeSymbol delegateType,
+        (INamedTypeSymbol Outer, INamedTypeSymbol Inner) delegateTypes,
         ILocalFunctionNode function,
+        IReadOnlyList<ITypeSymbol> typeParameters,
         
         ILocalDiagLogger localDiagLogger,
         IContainerNode parentContainer,
@@ -33,13 +31,14 @@ internal abstract class DelegateBaseNode : IDelegateBaseNode
         _function = function;
         _localDiagLogger = localDiagLogger;
         _parentContainer = parentContainer;
-        MethodGroup = function.Name;
-        Reference = referenceGenerator.Generate(delegateType);
-        TypeFullName = delegateType.FullName();
-        _innerType = delegateType.TypeArguments.Last();
+        var genericsSuffix = typeParameters.Any() ? $"<{string.Join(", ", typeParameters.Select(p => p.FullName()))}>" : string.Empty;
+        MethodGroup = $"{function.Name}{genericsSuffix}";
+        Reference = referenceGenerator.Generate(delegateTypes.Inner);
+        TypeFullName = delegateTypes.Outer.FullName();
+        _innerType = delegateTypes.Inner.TypeArguments.Last();
     }
 
-    public void Build(ImmutableStack<INamedTypeSymbol> implementationStack) => 
+    public virtual void Build(PassedContext passedContext) => 
         _parentContainer.RegisterDelegateBaseNode(this);
 
     public abstract void Accept(INodeVisitor nodeVisitor);

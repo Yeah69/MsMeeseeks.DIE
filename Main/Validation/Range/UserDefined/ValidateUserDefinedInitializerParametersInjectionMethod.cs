@@ -1,4 +1,3 @@
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
 
@@ -9,7 +8,7 @@ internal interface IValidateUserDefinedInitializerParametersInjectionMethod : IV
     
 }
 
-internal class ValidateUserDefinedInitializerParametersInjectionMethod : ValidateUserDefinedInjectionMethod, IValidateUserDefinedInitializerParametersInjectionMethod
+internal sealed class ValidateUserDefinedInitializerParametersInjectionMethod : ValidateUserDefinedInjectionMethod, IValidateUserDefinedInitializerParametersInjectionMethod
 {
     internal ValidateUserDefinedInitializerParametersInjectionMethod(
         IContainerWideContext containerWideContext,

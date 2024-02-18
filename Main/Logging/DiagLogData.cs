@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
+using MsMeeseeks.DIE.Nodes.Ranges;
 using MrMeeseeks.SourceGeneratorUtility;
 using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
@@ -18,7 +15,7 @@ internal static class ErrorLogData
 {
     internal static DiagLogData CircularReferenceInsideFactory(IImmutableStack<INamedTypeSymbol> cycle)
     {
-        var cycleText = string.Join(" --> ", cycle.Select(nts => ITypeSymbolExtensions.FullName(nts)));
+        var cycleText = string.Join(" --> ", cycle.Select(nts => nts.FullName()));
 
         return new DiagLogData(
             68,
@@ -72,16 +69,37 @@ internal static class ErrorLogData
             "Validation (Scope)",
             $"The scope \"{scope.Name}\" (of parent-container \"{parentContainer.Name}\") isn't validly defined: {specification}",
             DieExceptionKind.Validation);
+    
+    internal static DiagLogData ValidationBaseClass(INamedTypeSymbol baseType, INamedTypeSymbol range, string specification) =>
+        new(67,
+            2,
+            "Validation (Scope)",
+            $"The scope \"{baseType.Name}\" (of container/(transient) scope \"{range.Name}\") isn't validly defined: {specification}",
+            DieExceptionKind.Validation);
 
     internal static DiagLogData ValidationUserDefinedElement(
         ISymbol userDefinedElement, 
         INamedTypeSymbol parentRange,
         INamedTypeSymbol parentContainer,
+        string specification) =>
+        ValidationUserDefinedElementInner(userDefinedElement, parentRange.Name, parentContainer.Name, specification);
+
+    internal static DiagLogData ValidationUserDefinedElement(
+        ISymbol userDefinedElement, 
+        IRangeNode parentRange,
+        IContainerNode parentContainer,
+        string specification) =>
+        ValidationUserDefinedElementInner(userDefinedElement, parentRange.Name, parentContainer.Name, specification);
+
+    internal static DiagLogData ValidationUserDefinedElementInner(
+        ISymbol userDefinedElement, 
+        string parentRange,
+        string parentContainer,
         string specification)
     {
-        var rangeDescription = CustomSymbolEqualityComparer.Default.Equals(parentRange, parentContainer)
-            ? $"parent-Container \"{parentContainer.Name}\""
-            : $"Range \"{parentRange.Name}\" in parent-Container \"{parentContainer.Name}\"";
+        var rangeDescription = Equals(parentRange, parentContainer)
+            ? $"parent-Container \"{parentContainer}\""
+            : $"Range \"{parentRange}\" in parent-Container \"{parentContainer}\"";
         return new(67,
             3,
             "Validation (User-Defined Element)",
@@ -127,7 +145,7 @@ internal static class ErrorLogData
         new(66,
             2,
             "Impossible Exception",
-            $"You've run into an exception which should be impossible. Please make a issue at https://github.com/Yeah69/MrMeeseeks.DIE/issues/new with code hint \"{code.ToString()}\".",
+            $"You've run into an exception which should be impossible. Please create an issue - if none exists for this code hint yet - at https://github.com/Yeah69/MsMeeseeks.DIE/issues/new with code hint \"{code.ToString()}\".",
             DieExceptionKind.Impossible);
     
     internal static DiagLogData CompilationError(string message) =>
@@ -207,6 +225,29 @@ internal static class WarningLogData
             "Validation (Configuration Attribute)",
             $"The configuration attribute \"{attributeData.AttributeClass?.Name}\" (of \"{rangeDescription}\") isn't validly defined: {specification}",
             null);
+    }
+
+    internal static DiagLogData ValidationUserDefinedElement(
+        ISymbol userDefinedElement, 
+        IRangeNode parentRange,
+        IContainerNode parentContainer,
+        string specification) =>
+        ValidationUserDefinedElementInner(userDefinedElement, parentRange.Name, parentContainer.Name, specification);
+
+    internal static DiagLogData ValidationUserDefinedElementInner(
+        ISymbol userDefinedElement, 
+        string parentRange,
+        string parentContainer,
+        string specification)
+    {
+        var rangeDescription = Equals(parentRange, parentContainer)
+            ? $"parent-Container \"{parentContainer}\""
+            : $"Range \"{parentRange}\" in parent-Container \"{parentContainer}\"";
+        return new(71,
+            1,
+            "Validation (User-Defined Element)",
+            $"The user-defined element \"{userDefinedElement.Name}\" (of \"{rangeDescription}\") isn't validly defined: {specification}",
+            DieExceptionKind.Validation);
     }
     
     internal static DiagLogData Logging(string message) =>

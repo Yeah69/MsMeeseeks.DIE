@@ -1,4 +1,3 @@
-using System;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Ranges;
 
@@ -9,7 +8,7 @@ internal interface IRangeLevelLogMessageEnhancer
     string Enhance(string message);
 }
 
-internal class RangeLevelLogMessageEnhancer : IRangeLevelLogMessageEnhancer, ITransientScopeInstance
+internal sealed class RangeLevelLogMessageEnhancer : IRangeLevelLogMessageEnhancer, ITransientScopeInstance
 {
     private readonly IContainerLevelLogMessageEnhancer _parentEnhancer;
     private readonly Lazy<string> _prefix;

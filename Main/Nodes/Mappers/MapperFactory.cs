@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Immutable;
-using Microsoft.CodeAnalysis;
-
 namespace MsMeeseeks.DIE.Nodes.Mappers;
 
 internal interface IMapperFactory
@@ -9,7 +5,7 @@ internal interface IMapperFactory
     IElementNodeMapperBase Create(MapperData data);
 }
 
-internal class MapperFactory : IMapperFactory
+internal sealed class MapperFactory : IMapperFactory
 {
     private readonly Func<IElementNodeMapper> _typeToElementNodeMapperFactory;
     private readonly Func<IElementNodeMapperBase, ImmutableQueue<(INamedTypeSymbol, INamedTypeSymbol)>, IOverridingElementNodeMapper> _overridingElementNodeMapperFactory;

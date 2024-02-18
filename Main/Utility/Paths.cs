@@ -1,5 +1,4 @@
 using System.IO;
-using Microsoft.CodeAnalysis;
 
 namespace MsMeeseeks.DIE.Utility;
 
@@ -10,7 +9,7 @@ internal interface IPaths
     string AnalyticsResolutionGraph(string containerName);
 }
 
-internal class Paths : IPaths
+internal sealed class Paths : IPaths
 {
     internal Paths(GeneratorExecutionContext context)
     {

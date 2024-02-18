@@ -1,10 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.MsContainer;
@@ -16,19 +9,14 @@ using MsMeeseeks.DIE.Utility;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
-internal interface IMultiFunctionNode : IFunctionNode
+internal interface IMultiFunctionNode : IMultiFunctionNodeBase
 {
-    IReadOnlyList<IElementNode> ReturnedElements { get; }
-    bool IsAsyncEnumerable { get; }
-    string ItemTypeFullName { get; }
 }
 
-internal partial class MultiFunctionNode : ReturningFunctionNodeBase, IMultiFunctionNode, IScopeInstance
+internal sealed partial class MultiFunctionNode : MultiFunctionNodeBase, IMultiFunctionNode, IScopeInstance
 {
     private readonly INamedTypeSymbol _enumerableType;
     private readonly ICheckTypeProperties _checkTypeProperties;
-    private readonly Func<IElementNodeMapper> _typeToElementNodeMapperFactory;
-    private readonly Func<IElementNodeMapperBase, (INamedTypeSymbol, INamedTypeSymbol), IOverridingElementNodeWithDecorationMapper> _overridingElementNodeWithDecorationMapperFactory;
     private readonly WellKnownTypes _wellKnownTypes;
 
     internal MultiFunctionNode(
@@ -41,70 +29,46 @@ internal partial class MultiFunctionNode : ReturningFunctionNodeBase, IMultiFunc
         
         // dependencies
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
-        Func<string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<(string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
-        Func<string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, IScopeCallNode> scopeCallNodeFactory,
+        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ITransientScopeCallNode> transientScopeCallNodeFactory,
         Func<IElementNodeMapper> typeToElementNodeMapperFactory,
         Func<IElementNodeMapperBase, (INamedTypeSymbol, INamedTypeSymbol), IOverridingElementNodeWithDecorationMapper> overridingElementNodeWithDecorationMapperFactory,
+        ITypeParameterUtility typeParameterUtility,
         IContainerWideContext containerWideContext)
         : base(
-            Microsoft.CodeAnalysis.Accessibility.Private, 
             enumerableType, 
             parameters, 
-            ImmutableDictionary.Create<ITypeSymbol, IParameterNode>(CustomSymbolEqualityComparer.IncludeNullability), 
             parentContainer, 
-            transientScopeWideContext.Range,
+            transientScopeWideContext,
             parameterNodeFactory,
             plainFunctionCallNodeFactory,
             asyncFunctionCallNodeFactory,
             scopeCallNodeFactory,
             transientScopeCallNodeFactory,
+            typeToElementNodeMapperFactory,
+            overridingElementNodeWithDecorationMapperFactory,
+            typeParameterUtility,
             containerWideContext)
     {
         _enumerableType = enumerableType;
         _checkTypeProperties = transientScopeWideContext.CheckTypeProperties;
-        _typeToElementNodeMapperFactory = typeToElementNodeMapperFactory;
-        _overridingElementNodeWithDecorationMapperFactory = overridingElementNodeWithDecorationMapperFactory;
         _wellKnownTypes = containerWideContext.WellKnownTypes;
-
-        ItemTypeFullName = CollectionUtility.GetCollectionsInnerType(enumerableType).FullName();
-
-        SuppressAsync =
-            CustomSymbolEqualityComparer.Default.Equals(enumerableType.OriginalDefinition, containerWideContext.WellKnownTypesCollections.IAsyncEnumerable1);
-        IsAsyncEnumerable =
-            CustomSymbolEqualityComparer.Default.Equals(enumerableType.OriginalDefinition, containerWideContext.WellKnownTypesCollections.IAsyncEnumerable1);
-
-        ReturnedTypeNameNotWrapped = enumerableType.Name;
-
-        Name = referenceGenerator.Generate("CreateMulti", enumerableType);
+        Name = referenceGenerator.Generate("CreateMulti", _enumerableType);
     }
 
-    private IElementNodeMapperBase GetMapper(
-        ITypeSymbol unwrappedType,
-        ITypeSymbol concreteImplementationType)
-    {
-        var baseMapper = _typeToElementNodeMapperFactory();
-        return concreteImplementationType is INamedTypeSymbol namedTypeSymbol && unwrappedType is INamedTypeSymbol namedUnwrappedType
-            ? _overridingElementNodeWithDecorationMapperFactory(
-                baseMapper,
-                (namedUnwrappedType, namedTypeSymbol))
-            : baseMapper;
-    }
-
-    protected override bool SuppressAsync { get; }
-
-    private IElementNode MapToReturnedElement(IElementNodeMapperBase mapper, ITypeSymbol itemType) =>
-        mapper.Map(itemType, ImmutableStack.Create<INamedTypeSymbol>());
+    private static IElementNode MapToReturnedElement(IElementNodeMapperBase mapper, ITypeSymbol itemType) =>
+        mapper.Map(itemType, new(ImmutableStack<INamedTypeSymbol>.Empty, null));
     
-    public override void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
+    public override void Build(PassedContext passedContext)
     {
-        base.Build(implementationStack);
+        base.Build(passedContext);
         var itemType = CollectionUtility.GetCollectionsInnerType(_enumerableType);
         var unwrappedItemType = TypeSymbolUtility.GetUnwrappedType(itemType, _wellKnownTypes);
 
         var concreteItemTypes = unwrappedItemType is INamedTypeSymbol namedTypeSymbol
-            ? _checkTypeProperties.MapToImplementations(namedTypeSymbol)
+            ? _checkTypeProperties.MapToImplementations(namedTypeSymbol, passedContext.InjectionKeyModification)
             : (IReadOnlyList<ITypeSymbol>) new[] { unwrappedItemType };
 
         ReturnedElements = concreteItemTypes
@@ -115,9 +79,4 @@ internal partial class MultiFunctionNode : ReturningFunctionNodeBase, IMultiFunc
     }
 
     public override string Name { get; protected set; }
-    public override string ReturnedTypeNameNotWrapped { get; }
-
-    public IReadOnlyList<IElementNode> ReturnedElements { get; private set; } = Array.Empty<IElementNode>();
-    public bool IsAsyncEnumerable { get; }
-    public string ItemTypeFullName { get; }
 }

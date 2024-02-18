@@ -1,9 +1,5 @@
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Nodes.Mappers;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Elements.Tuples;
 
@@ -12,7 +8,7 @@ internal interface IValueTupleSyntaxNode : IElementNode
     IReadOnlyList<IElementNode> Items { get; }
 }
 
-internal partial class ValueTupleSyntaxNode : IValueTupleSyntaxNode
+internal sealed partial class ValueTupleSyntaxNode : IValueTupleSyntaxNode
 {
     private readonly INamedTypeSymbol _valueTupleType;
     private readonly IElementNodeMapperBase _elementNodeMapper;
@@ -30,15 +26,15 @@ internal partial class ValueTupleSyntaxNode : IValueTupleSyntaxNode
         Reference = referenceGenerator.Generate(_valueTupleType);
     }
     
-    public void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
+    public void Build(PassedContext passedContext)
     {
-        _items = GetTypeArguments(_valueTupleType).Select(type => _elementNodeMapper.Map(type, implementationStack)).ToList();
+        _items = GetTypeArguments(_valueTupleType).Select(type => _elementNodeMapper.Map(type, passedContext)).ToList();
 
         static IEnumerable<ITypeSymbol> GetTypeArguments(INamedTypeSymbol valueTupleType)
         {
             foreach (var typeArgument in valueTupleType.TypeArguments)
             {
-                if (typeArgument.FullName().StartsWith("(") && typeArgument.FullName().EndsWith(")") &&
+                if (typeArgument.FullName().StartsWith("(", StringComparison.Ordinal) && typeArgument.FullName().EndsWith(")", StringComparison.Ordinal) &&
                     typeArgument is INamedTypeSymbol nextSyntaxValueTupleType)
                 {
                     foreach (var typeSymbol in GetTypeArguments(nextSyntaxValueTupleType))

@@ -1,10 +1,6 @@
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
-using MrMeeseeks.SourceGeneratorUtility.Extensions;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Nodes.Functions;
+using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Ranges;
 
@@ -19,7 +15,7 @@ internal interface ICreateContainerFunctionNode : INode
     string ReturnTypeFullName { get; }
 }
 
-internal partial class CreateContainerFunctionNode : ICreateContainerFunctionNode
+internal sealed partial class CreateContainerFunctionNode : ICreateContainerFunctionNode
 {
     private readonly IVoidFunctionNode? _initializationFunction;
     private readonly INamedTypeSymbol _containerType;
@@ -27,7 +23,7 @@ internal partial class CreateContainerFunctionNode : ICreateContainerFunctionNod
 
     internal CreateContainerFunctionNode(
         // parameters
-        IMethodSymbol constructor,
+        IMethodSymbol? constructor, // Container can have no user-defined constructors (null then; in which case it will be treated like an empty constructor)
         IVoidFunctionNode? initializationFunction,
         
         // dependencies
@@ -39,15 +35,14 @@ internal partial class CreateContainerFunctionNode : ICreateContainerFunctionNod
         Name = containerInfoContext.ContainerInfo.Name;
         ContainerTypeFullName = containerInfoContext.ContainerInfo.FullName;
         ContainerReference = referenceGenerator.Generate(containerInfoContext.ContainerInfo.ContainerType);
-        Parameters = constructor.Parameters.Select(ps => (ITypeSymbolExtensions.FullName(ps.Type), ps.Name)).ToList();
+        Parameters = constructor?.Parameters.Select(ps => (ps.Type.FullName(), ps.Name)).ToList()
+            ?? new List<(string, string)>();
         InitializationFunctionName = initializationFunction?.Name;
         _containerType = containerInfoContext.ContainerInfo.ContainerType;
         _wellKnownTypes = containerWideContext.WellKnownTypes;
     }
     
-    public void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
-    {
-    }
+    public void Build(PassedContext passedContext) { }
 
     public string Name { get; }
     public IReadOnlyList<(string TypeFullName, string Reference)> Parameters { get; }

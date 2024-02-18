@@ -1,8 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Extensions;
@@ -24,7 +19,7 @@ internal interface IScopeNode : IScopeNodeBase
     IScopeCallNode BuildScopeCallFunction(string containerParameter, string transientScopeInterfaceParameter, INamedTypeSymbol type, IRangeNode callingRange, IFunctionNode callingFunction);
 }
 
-internal partial class ScopeNode : ScopeNodeBase, IScopeNode, ITransientScopeInstance
+internal sealed partial class ScopeNode : ScopeNodeBase, IScopeNode, ITransientScopeInstance
 {
     private readonly Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateScopeFunctionNodeRoot> _createScopeFunctionNodeFactory;
 
@@ -35,10 +30,13 @@ internal partial class ScopeNode : ScopeNodeBase, IScopeNode, ITransientScopeIns
         IScopeManager scopeManager,
         IUserDefinedElements userDefinedElements,
         IReferenceGenerator referenceGenerator,
+        ITypeParameterUtility typeParameterUtility,
         IContainerWideContext containerWideContext,
         IMapperDataToFunctionKeyTypeConverter mapperDataToFunctionKeyTypeConverter,
         Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateFunctionNodeRoot> createFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiFunctionNodeRoot> multiFunctionNodeFactory,
+        Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueFunctionNodeRoot> multiKeyValueFunctionNodeFactory,
+        Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueMultiFunctionNodeRoot> multiKeyValueMultiFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateScopeFunctionNodeRoot> createScopeFunctionNodeFactory,
         Func<ScopeLevel, INamedTypeSymbol, IRangedInstanceFunctionGroupNode> rangedInstanceFunctionGroupNodeFactory,
         Func<IReadOnlyList<IInitializedInstanceNode>, IReadOnlyList<ITypeSymbol>, IVoidFunctionNodeRoot> voidFunctionNodeFactory, 
@@ -49,11 +47,14 @@ internal partial class ScopeNode : ScopeNodeBase, IScopeNode, ITransientScopeIns
             parentContainer,
             scopeManager,
             userDefinedElements, 
-            referenceGenerator, 
+            referenceGenerator,
+            typeParameterUtility,
             containerWideContext,
             mapperDataToFunctionKeyTypeConverter,
             createFunctionNodeFactory,  
             multiFunctionNodeFactory,
+            multiKeyValueFunctionNodeFactory,
+            multiKeyValueMultiFunctionNodeFactory,
             rangedInstanceFunctionGroupNodeFactory,
             voidFunctionNodeFactory,
             disposalHandlingNodeFactory,
@@ -76,17 +77,26 @@ internal partial class ScopeNode : ScopeNodeBase, IScopeNode, ITransientScopeIns
             type,
             callingFunction);
 
-    public IScopeCallNode BuildScopeCallFunction(string containerParameter, string transientScopeInterfaceParameter, INamedTypeSymbol type, IRangeNode callingRange, IFunctionNode callingFunction) =>
-        FunctionResolutionUtility.GetOrCreateFunctionCall(
+    public IScopeCallNode BuildScopeCallFunction(string containerParameter, string transientScopeInterfaceParameter,
+        INamedTypeSymbol type, IRangeNode callingRange, IFunctionNode callingFunction)
+    {
+        return FunctionResolutionUtility.GetOrCreateFunctionCall(
             type,
             callingFunction,
             _createFunctions,
             () => _createScopeFunctionNodeFactory(
-                type,
-                callingFunction.Overrides.Select(kvp => kvp.Key).ToList())
+                    (INamedTypeSymbol) TypeParameterUtility.ReplaceTypeParametersByCustom(type),
+                    callingFunction.Overrides.Select(kvp => kvp.Key).ToList())
                 .Function
-                .EnqueueBuildJobTo(ParentContainer.BuildQueue, ImmutableStack<INamedTypeSymbol>.Empty),
-            f => f.CreateScopeCall(containerParameter, transientScopeInterfaceParameter, callingRange, callingFunction, this));
+                .EnqueueBuildJobTo(ParentContainer.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null)),
+            f => f.CreateScopeCall(
+                type, 
+                containerParameter, 
+                transientScopeInterfaceParameter, 
+                callingRange, 
+                callingFunction,
+                this, TypeParameterUtility.ExtractTypeParameters(type)));
+    }
 
     public string TransientScopeInterfaceFullName { get; }
     public string TransientScopeInterfaceReference { get; }

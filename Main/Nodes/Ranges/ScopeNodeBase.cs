@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -8,6 +5,7 @@ using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Mappers;
 using MsMeeseeks.DIE.Nodes.Roots;
+using MsMeeseeks.DIE.Utility;
 
 namespace MsMeeseeks.DIE.Nodes.Ranges;
 
@@ -26,10 +24,13 @@ internal abstract class ScopeNodeBase : RangeNode, IScopeNodeBase
         IScopeManager scopeManager,
         IUserDefinedElements userDefinedElements,
         IReferenceGenerator referenceGenerator,
+        ITypeParameterUtility typeParameterUtility,
         IContainerWideContext containerWideContext,
         IMapperDataToFunctionKeyTypeConverter mapperDataToFunctionKeyTypeConverter,
         Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateFunctionNodeRoot> createFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiFunctionNodeRoot> multiFunctionNodeFactory,
+        Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueFunctionNodeRoot> multiKeyValueFunctionNodeFactory,
+        Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueMultiFunctionNodeRoot> multiKeyValueMultiFunctionNodeFactory,
         Func<ScopeLevel, INamedTypeSymbol, IRangedInstanceFunctionGroupNode> rangedInstanceFunctionGroupNodeFactory,
         Func<IReadOnlyList<IInitializedInstanceNode>, IReadOnlyList<ITypeSymbol>, IVoidFunctionNodeRoot> voidFunctionNodeFactory, 
         Func<IDisposalHandlingNode> disposalHandlingNodeFactory,
@@ -39,9 +40,13 @@ internal abstract class ScopeNodeBase : RangeNode, IScopeNodeBase
             scopeInfo.ScopeType,
             userDefinedElements, 
             mapperDataToFunctionKeyTypeConverter,
+            typeParameterUtility,
             containerWideContext,
+            referenceGenerator,
             createFunctionNodeFactory,  
             multiFunctionNodeFactory,
+            multiKeyValueFunctionNodeFactory,
+            multiKeyValueMultiFunctionNodeFactory,
             rangedInstanceFunctionGroupNodeFactory,
             voidFunctionNodeFactory,
             disposalHandlingNodeFactory,

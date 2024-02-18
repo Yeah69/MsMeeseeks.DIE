@@ -1,7 +1,3 @@
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Logging;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
@@ -13,7 +9,7 @@ internal interface IFunctionCycleTracker
     void DetectCycle(IContainerNode containerNode);
 }
 
-internal class FunctionCycleTracker : IFunctionCycleTracker
+internal sealed class FunctionCycleTracker : IFunctionCycleTracker
 {
     private readonly ILocalDiagLogger _localDiagLogger;
 
@@ -28,7 +24,7 @@ internal class FunctionCycleTracker : IFunctionCycleTracker
         HashSet<IFunctionNode> cf = new();
         Stack<IFunctionNode> s = new();
 
-        while (roots.Any() && roots.Dequeue() is {} next)
+        while (roots.Count != 0 && roots.Dequeue() is {} next)
             DetectCycleInner(
                 next, 
                 v, 
@@ -50,8 +46,8 @@ internal class FunctionCycleTracker : IFunctionCycleTracker
                 do
                 {
                     i = stack.Pop();
-                    cycleStack = cycleStack.Push(current.Description);
-                } while (i != current && stack.Any());
+                    cycleStack = cycleStack.Push(i.Description);
+                } while (i != current && stack.Count != 0);
                 
                 _localDiagLogger.Error(ErrorLogData.CircularReferenceAmongFactories(cycleStack), Location.None);
                 throw new FunctionCycleDieException(cycleStack);

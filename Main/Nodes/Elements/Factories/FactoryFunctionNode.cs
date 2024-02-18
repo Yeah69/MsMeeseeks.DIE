@@ -1,7 +1,3 @@
-using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.Linq;
-using Microsoft.CodeAnalysis;
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Mappers;
@@ -13,7 +9,7 @@ internal interface IFactoryFunctionNode : IFactoryNodeBase
     IReadOnlyList<(string Name, IElementNode Element)> Parameters { get; }
 }
 
-internal partial class FactoryFunctionNode : FactoryNodeBase, IFactoryFunctionNode
+internal sealed partial class FactoryFunctionNode : FactoryNodeBase, IFactoryFunctionNode
 {
     private readonly IMethodSymbol _methodSymbol;
     private readonly IElementNodeMapperBase _elementNodeMapperBase;
@@ -32,12 +28,12 @@ internal partial class FactoryFunctionNode : FactoryNodeBase, IFactoryFunctionNo
         _elementNodeMapperBase = elementNodeMapperBase;
     }
 
-    public override void Build(ImmutableStack<INamedTypeSymbol> implementationStack)
+    public override void Build(PassedContext passedContext)
     {
         _parameters.AddRange(_methodSymbol
             .Parameters
-            .Select(p => (p.Name, _elementNodeMapperBase.Map(p.Type, implementationStack))));
-        base.Build(implementationStack);
+            .Select(p => (p.Name, _elementNodeMapperBase.Map(p.Type, passedContext))));
+        base.Build(passedContext);
     }
     
     public IReadOnlyList<(string, IElementNode)> Parameters => _parameters;
