@@ -4,10 +4,7 @@ using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Validation.Range.UserDefined;
 
-internal interface IValidateUserDefinedInjectionMethod : IValidateUserDefinedMethod
-{
-    
-}
+internal interface IValidateUserDefinedInjectionMethod : IValidateUserDefinedMethod;
 
 internal abstract class ValidateUserDefinedInjectionMethod : ValidateUserDefinedMethod, IValidateUserDefinedInjectionMethod
 {

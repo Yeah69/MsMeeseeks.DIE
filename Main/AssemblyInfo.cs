@@ -8,7 +8,4 @@ global using System.Text;
 
 namespace MsMeeseeks.DIE;
 
-public class AssemblyInfo
-{
-    
-}
+public class AssemblyInfo;

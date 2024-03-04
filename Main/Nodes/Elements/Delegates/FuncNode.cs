@@ -4,10 +4,7 @@ using MsMeeseeks.DIE.Nodes.Ranges;
 
 namespace MsMeeseeks.DIE.Nodes.Elements.Delegates;
 
-internal interface IFuncNode : IDelegateBaseNode
-{
-    
-}
+internal interface IFuncNode : IDelegateBaseNode;
 
 internal sealed partial class FuncNode : DelegateBaseNode, IFuncNode
 {

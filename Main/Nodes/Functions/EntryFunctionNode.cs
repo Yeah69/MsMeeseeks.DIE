@@ -9,7 +9,7 @@ using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
-internal interface IEntryFunctionNode : ISingleFunctionNode { }
+internal interface IEntryFunctionNode : ISingleFunctionNode;
 
 internal sealed partial class EntryFunctionNode : SingleFunctionNodeBase, IEntryFunctionNode, IScopeInstance
 {

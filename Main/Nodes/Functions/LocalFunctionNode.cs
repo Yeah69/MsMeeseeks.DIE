@@ -8,9 +8,7 @@ using MsMeeseeks.DIE.Utility;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
-internal interface ILocalFunctionNode : ISingleFunctionNode
-{
-}
+internal interface ILocalFunctionNode : ISingleFunctionNode;
 
 internal sealed partial class LocalFunctionNode : SingleFunctionNodeBase, ILocalFunctionNode, IScopeInstance
 {

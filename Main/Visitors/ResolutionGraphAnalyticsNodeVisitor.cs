@@ -13,10 +13,7 @@ using MsMeeseeks.DIE.Utility;
 
 namespace MsMeeseeks.DIE.Visitors;
 
-internal interface IResolutionGraphAnalyticsNodeVisitor : INodeVisitor
-{
-    
-}
+internal interface IResolutionGraphAnalyticsNodeVisitor : INodeVisitor;
 
 internal sealed class ResolutionGraphAnalyticsNodeVisitor : IResolutionGraphAnalyticsNodeVisitor
 {

@@ -10,9 +10,7 @@ using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
-internal interface IRangedInstanceFunctionNode : ISingleFunctionNode
-{
-}
+internal interface IRangedInstanceFunctionNode : ISingleFunctionNode;
 
 internal interface IRangedInstanceFunctionNodeInitializer
 {

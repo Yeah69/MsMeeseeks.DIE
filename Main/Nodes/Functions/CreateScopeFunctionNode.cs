@@ -9,9 +9,7 @@ using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
-internal interface ICreateScopeFunctionNode : ICreateFunctionNodeBase
-{
-}
+internal interface ICreateScopeFunctionNode : ICreateFunctionNodeBase;
 
 internal sealed partial class CreateScopeFunctionNode : SingleFunctionNodeBase, ICreateScopeFunctionNode, IScopeInstance
 {

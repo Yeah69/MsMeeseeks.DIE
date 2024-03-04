@@ -12,9 +12,7 @@ using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Nodes.Mappers;
 
-internal interface ITransientScopeDisposalElementNodeMapper : IElementNodeMapperBase
-{
-}
+internal interface ITransientScopeDisposalElementNodeMapper : IElementNodeMapperBase;
 
 internal sealed class TransientScopeDisposalElementNodeMapper : ElementNodeMapperBase, ITransientScopeDisposalElementNodeMapper
 {
