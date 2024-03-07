@@ -21,7 +21,7 @@ internal sealed partial class MsContainer
     private void DIE_ConstrParams_UserDefinedElements(out (INamedTypeSymbol? Range, INamedTypeSymbol Container) types) => 
         types = (DIE_Factory_ContainerInfo.ContainerType, DIE_Factory_ContainerInfo.ContainerType);
 
-    private void DIE_ConstrParams_ScopeInfo(
+    private static void DIE_ConstrParams_ScopeInfo(
         out string name,
         out INamedTypeSymbol? scopeType)
     {
@@ -46,7 +46,7 @@ internal sealed partial class MsContainer
 
     private sealed partial class DIE_TransientScope_ScopeNodeRoot
     {
-        private void DIE_ConstrParams_UserDefinedElements(
+        private static void DIE_ConstrParams_UserDefinedElements(
             IContainerInfoContext containerInfoContext,
             IScopeInfo scopeInfo,
             out (INamedTypeSymbol? Range, INamedTypeSymbol Container) types) => 
@@ -55,7 +55,7 @@ internal sealed partial class MsContainer
 
     private sealed partial class DIE_TransientScope_TransientScopeNodeRoot
     {
-        private void DIE_ConstrParams_UserDefinedElements(
+        private static void DIE_ConstrParams_UserDefinedElements(
             IContainerInfoContext containerInfoContext,
             IScopeInfo scopeInfo,
             out (INamedTypeSymbol? Range, INamedTypeSymbol Container) types) => 
