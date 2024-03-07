@@ -1,4 +1,4 @@
-using MsMeeseeks.DIE.Nodes.Mappers;
+using MsMeeseeks.DIE.Mappers;
 using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE.Nodes.Elements.Tuples;

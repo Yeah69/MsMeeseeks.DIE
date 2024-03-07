@@ -1,6 +1,6 @@
 using MrMeeseeks.SourceGeneratorUtility;
 
-namespace MsMeeseeks.DIE.Nodes.Mappers;
+namespace MsMeeseeks.DIE.Mappers;
 
 internal abstract record MapperData;
 

@@ -1,5 +1,6 @@
 using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
+using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Utility;
 using MrMeeseeks.SourceGeneratorUtility;
 using MrMeeseeks.SourceGeneratorUtility.Extensions;
@@ -18,7 +19,7 @@ internal interface IUserDefinedElements
     IMethodSymbol? GetInitializerParametersInjectionFor(INamedTypeSymbol type);
 }
 
-internal sealed class UserDefinedElements : IUserDefinedElements
+internal sealed class UserDefinedElements : IUserDefinedElements, ITransientScopeInstance
 {
     private readonly Dictionary<ITypeSymbol, IFieldSymbol> _typeToField;
     private readonly Dictionary<ITypeSymbol, IPropertySymbol> _typeToProperty;
