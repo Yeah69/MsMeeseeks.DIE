@@ -1,4 +1,5 @@
 ﻿using MrMeeseeks.DIE.Configuration.Attributes;
+using MsMeeseeks.DIE.MsContainer;
 using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
 namespace MsMeeseeks.DIE;
@@ -46,6 +47,7 @@ internal sealed record WellKnownTypesAggregation(
     INamedTypeSymbol FilterScopeRootImplementationAggregationAttribute,
     INamedTypeSymbol FilterAllImplementationsAggregationAttribute,
     INamedTypeSymbol FilterAssemblyImplementationsAggregationAttribute)
+    : IContainerInstance
 {
     internal static WellKnownTypesAggregation Create(Compilation compilation) => new (
         ImplementationAggregationAttribute: compilation.GetTypeByMetadataNameOrThrow(typeof(ImplementationAggregationAttribute).FullName ?? ""),

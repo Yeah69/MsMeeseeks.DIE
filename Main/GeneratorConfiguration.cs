@@ -1,4 +1,3 @@
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.MsContainer;
 using MrMeeseeks.SourceGeneratorUtility;
 
@@ -13,10 +12,10 @@ internal sealed class GeneratorConfiguration : IGeneratorConfiguration, IContain
 {
     public GeneratorConfiguration(
         GeneratorExecutionContext context,
-        IContainerWideContext containerWideContext) =>
+        WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous) =>
         ErrorDescriptionInsteadOfBuildFailure = context.Compilation.Assembly.GetAttributes()
             .Any(ad => CustomSymbolEqualityComparer.Default.Equals(
-                containerWideContext.WellKnownTypesMiscellaneous.ErrorDescriptionInsteadOfBuildFailureAttribute, 
+                wellKnownTypesMiscellaneous.ErrorDescriptionInsteadOfBuildFailureAttribute, 
                 ad.AttributeClass));
 
     public bool ErrorDescriptionInsteadOfBuildFailure { get; }

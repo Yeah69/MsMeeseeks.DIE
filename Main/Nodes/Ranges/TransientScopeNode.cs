@@ -1,5 +1,4 @@
 using MsMeeseeks.DIE.Configuration;
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Extensions;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.MsContainer;
@@ -29,7 +28,9 @@ internal sealed partial class TransientScopeNode : ScopeNodeBase, ITransientScop
         IUserDefinedElements userDefinedElements,
         IReferenceGenerator referenceGenerator,
         ITypeParameterUtility typeParameterUtility,
-        IContainerWideContext containerWideContext,
+        IRangeUtility rangeUtility,
+        WellKnownTypes wellKnownTypes,
+        WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous,
         IMapperDataToFunctionKeyTypeConverter mapperDataToFunctionKeyTypeConverter,
         Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateFunctionNodeRoot> createFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiFunctionNodeRoot> multiFunctionNodeFactory,
@@ -47,7 +48,9 @@ internal sealed partial class TransientScopeNode : ScopeNodeBase, ITransientScop
             userDefinedElements, 
             referenceGenerator,
             typeParameterUtility,
-            containerWideContext,
+            rangeUtility,
+            wellKnownTypes,
+            wellKnownTypesMiscellaneous,
             mapperDataToFunctionKeyTypeConverter,
             createFunctionNodeFactory, 
             multiFunctionNodeFactory,

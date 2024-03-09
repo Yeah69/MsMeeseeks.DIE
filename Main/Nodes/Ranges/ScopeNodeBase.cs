@@ -1,5 +1,4 @@
 using MsMeeseeks.DIE.Configuration;
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.Nodes.Elements;
 using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
@@ -25,7 +24,9 @@ internal abstract class ScopeNodeBase : RangeNode, IScopeNodeBase
         IUserDefinedElements userDefinedElements,
         IReferenceGenerator referenceGenerator,
         ITypeParameterUtility typeParameterUtility,
-        IContainerWideContext containerWideContext,
+        IRangeUtility rangeUtility,
+        WellKnownTypes wellKnownTypes,
+        WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous,
         IMapperDataToFunctionKeyTypeConverter mapperDataToFunctionKeyTypeConverter,
         Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateFunctionNodeRoot> createFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiFunctionNodeRoot> multiFunctionNodeFactory,
@@ -41,7 +42,9 @@ internal abstract class ScopeNodeBase : RangeNode, IScopeNodeBase
             userDefinedElements, 
             mapperDataToFunctionKeyTypeConverter,
             typeParameterUtility,
-            containerWideContext,
+            rangeUtility,
+            wellKnownTypes,
+            wellKnownTypesMiscellaneous,
             referenceGenerator,
             createFunctionNodeFactory,  
             multiFunctionNodeFactory,

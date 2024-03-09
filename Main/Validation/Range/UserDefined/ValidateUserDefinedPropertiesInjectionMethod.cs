@@ -1,4 +1,3 @@
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
 
 namespace MsMeeseeks.DIE.Validation.Range.UserDefined;
@@ -8,10 +7,10 @@ internal interface IValidateUserDefinedPropertiesMethod: IValidateUserDefinedInj
 internal sealed class ValidateUserDefinedPropertiesInjectionMethod : ValidateUserDefinedInjectionMethod, IValidateUserDefinedPropertiesMethod
 {
     internal ValidateUserDefinedPropertiesInjectionMethod(
-        IContainerWideContext containerWideContext,
+        WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous,
         ILocalDiagLogger diagLogger) 
         : base(diagLogger) => 
-        InjectionAttribute = containerWideContext.WellKnownTypesMiscellaneous.UserDefinedPropertiesInjectionAttribute;
+        InjectionAttribute = wellKnownTypesMiscellaneous.UserDefinedPropertiesInjectionAttribute;
 
     protected override INamedTypeSymbol InjectionAttribute { get; }
 }

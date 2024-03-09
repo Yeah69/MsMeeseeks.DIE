@@ -1,4 +1,3 @@
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Mappers.MappingParts;
 using MsMeeseeks.DIE.Nodes;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -18,7 +17,7 @@ internal sealed class TransientScopeDisposalElementNodeMapper : ElementNodeMappe
         IElementNodeMapperBase parentElementNodeMapper,
         
         IContainerNode parentContainer,
-        IContainerWideContext containerWideContext,
+        WellKnownTypes wellKnownTypes,
         IOverridesMappingPart overridesMappingPart,
         IUserDefinedElementsMappingPart userDefinedElementsMappingPart,
         IAsyncWrapperMappingPart asyncWrapperMappingPart,
@@ -41,7 +40,7 @@ internal sealed class TransientScopeDisposalElementNodeMapper : ElementNodeMappe
             outParameterNodeFactory,
             errorNodeFactory)
     {
-        _wellKnownTypes = containerWideContext.WellKnownTypes;
+        _wellKnownTypes = wellKnownTypes;
         _transientScopeDisposalTriggerNodeFactory = transientScopeDisposalTriggerNodeFactory;
         Next = parentElementNodeMapper;
     }

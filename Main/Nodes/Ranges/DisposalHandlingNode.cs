@@ -1,5 +1,3 @@
-using MsMeeseeks.DIE.Contexts;
-
 namespace MsMeeseeks.DIE.Nodes.Ranges;
 
 internal interface IDisposalHandlingNode
@@ -27,9 +25,8 @@ internal sealed class DisposalHandlingNode : IDisposalHandlingNode
     
     public DisposalHandlingNode(
         IReferenceGenerator referenceGenerator,
-        IContainerWideContext containerWideContext)
+        WellKnownTypes wellKnownTypes)
     {
-        var wellKnownTypes = containerWideContext.WellKnownTypes;
         DisposedFieldReference = referenceGenerator.Generate("_disposed");
         DisposedLocalReference = referenceGenerator.Generate("disposed");
         DisposedPropertyReference = referenceGenerator.Generate("Disposed");

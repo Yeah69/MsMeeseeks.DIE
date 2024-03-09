@@ -49,7 +49,7 @@ internal sealed class AbstractionImplementationMappingPart : IAbstractionImpleme
         ITransientScopeWideContext transientScopeWideContext,
         IFunctionNode parentFunction,
         ILocalDiagLogger localDiagLogger,
-        IContainerWideContext containerWideContext,
+        WellKnownTypes wellKnownTypes,
         IUserDefinedElementsMappingPart userDefinedElementsMappingPart,
         Func<string, ITypeSymbol, IErrorNode> errorNodeFactory,
         Func<ITypeSymbol, INullNode> nullNodeFactory, 
@@ -68,7 +68,7 @@ internal sealed class AbstractionImplementationMappingPart : IAbstractionImpleme
         _implementationNodeFactory = implementationNodeFactory;
         _reusedNodeFactory = reusedNodeFactory;
         _overridingElementNodeMapperFactory = overridingElementNodeMapperFactory;
-        _wellKnownTypes = containerWideContext.WellKnownTypes;
+        _wellKnownTypes = wellKnownTypes;
     }
 
     public IElementNode? Map(MappingPartData data)
