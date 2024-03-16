@@ -27,7 +27,7 @@ internal sealed class DelegateMappingPart : IDelegateMappingPart, IScopeInstance
     private readonly WellKnownTypes _wellKnownTypes;
 
 
-    public DelegateMappingPart(
+    internal DelegateMappingPart(
         IContainerNode parentContainer, 
         IFunctionNode parentFunction, 
         ITypeParameterUtility typeParameterUtility,
