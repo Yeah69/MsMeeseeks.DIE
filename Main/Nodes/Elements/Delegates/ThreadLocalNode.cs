@@ -1,5 +1,4 @@
 using MsMeeseeks.DIE.Configuration;
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Logging;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
@@ -24,13 +23,14 @@ internal sealed partial class ThreadLocalNode : DelegateBaseNode, IThreadLocalNo
         
         ILocalDiagLogger localDiagLogger,
         IContainerNode parentContainer,
-        ITransientScopeWideContext transientScopeWideContext,
+        IRangeNode parentRange,
+        ICheckTypeProperties checkTypeProperties,
         IReferenceGenerator referenceGenerator) 
         : base(delegateTypes, function, typeParameters, localDiagLogger, parentContainer, referenceGenerator)
     {
         _threadLocalType = delegateTypes.Inner;
-        _parentRange = transientScopeWideContext.Range;
-        _checkTypeProperties = transientScopeWideContext.CheckTypeProperties;
+        _parentRange = parentRange;
+        _checkTypeProperties = checkTypeProperties;
     }
 
     public override void Build(PassedContext passedContext)

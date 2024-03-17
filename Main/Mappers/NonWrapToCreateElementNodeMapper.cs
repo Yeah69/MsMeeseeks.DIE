@@ -1,4 +1,3 @@
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Mappers.MappingParts;
 using MsMeeseeks.DIE.Nodes;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -21,7 +20,7 @@ internal sealed class NonWrapToCreateElementNodeMapper : ElementNodeMapperBase, 
         
         IFunctionNode parentFunction,
         IContainerNode parentContainer,
-        ITransientScopeWideContext transientScopeWideContext,
+        IRangeNode parentRange,
         WellKnownTypes wellKnownTypes,
         IOverridesMappingPart overridesMappingPart,
         IUserDefinedElementsMappingPart userDefinedElementsMappingPart,
@@ -49,7 +48,7 @@ internal sealed class NonWrapToCreateElementNodeMapper : ElementNodeMapperBase, 
             errorNodeFactory)
     {
         _parentFunction = parentFunction;
-        _parentRange = transientScopeWideContext.Range;
+        _parentRange = parentRange;
         Next = parentElementNodeMapper;
         _wellKnownTypes = wellKnownTypes;
     }

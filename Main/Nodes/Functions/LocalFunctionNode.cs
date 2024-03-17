@@ -1,4 +1,3 @@
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -22,7 +21,7 @@ internal sealed partial class LocalFunctionNode : SingleFunctionNodeBase, ILocal
         ImmutableDictionary<ITypeSymbol, IParameterNode> closureParameters, 
         
         // dependencies
-        ITransientScopeWideContext transientScopeWideContext,
+        IRangeNode parentRange,
         IContainerNode parentContainer, 
         IReferenceGenerator referenceGenerator, 
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
@@ -39,7 +38,7 @@ internal sealed partial class LocalFunctionNode : SingleFunctionNodeBase, ILocal
             typeSymbol, 
             parameters, 
             closureParameters,
-            transientScopeWideContext.Range, 
+            parentRange, 
             parentContainer, 
             parameterNodeFactory,
             plainFunctionCallNodeFactory,

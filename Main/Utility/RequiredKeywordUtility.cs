@@ -1,4 +1,5 @@
 using MsMeeseeks.DIE.MsContainer;
+using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Utility;
 
@@ -10,28 +11,31 @@ internal interface IRequiredKeywordUtility
 
 internal sealed class RequiredKeywordUtility : IRequiredKeywordUtility, IContainerInstance
 {
-    private readonly WellKnownTypesMiscellaneous _wellKnownTypesMiscellaneous;
+    private readonly Compilation _compilation;
+    private readonly ICheckInternalsVisible _checkInternalsVisible;
     private bool _isRequiredKeywordRequired;
-    
+
     internal RequiredKeywordUtility(
-        WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous)
+        GeneratorExecutionContext generatorExecutionContext,
+        ICheckInternalsVisible checkInternalsVisible)
     {
-        _wellKnownTypesMiscellaneous = wellKnownTypesMiscellaneous;
+        _compilation = generatorExecutionContext.Compilation;
+        _checkInternalsVisible = checkInternalsVisible;
     }
 
     public void SetRequiredKeywordAsRequired() => _isRequiredKeywordRequired = true;
     public string? GenerateRequiredKeywordTypesFile()
     {
+        var isExternalInit = CheckWhetherTypeIsAccessible("System.Runtime.CompilerServices.IsExternalInit");
+        var requiredMemberAttribute = CheckWhetherTypeIsAccessible("System.Runtime.CompilerServices.RequiredMemberAttribute");
+        var compilerFeatureRequiredAttribute = CheckWhetherTypeIsAccessible("System.Runtime.CompilerServices.CompilerFeatureRequiredAttribute");
+        var setsRequiredMembersAttribute = CheckWhetherTypeIsAccessible("System.Diagnostics.CodeAnalysis.SetsRequiredMembersAttribute");
+
         if (!_isRequiredKeywordRequired 
-            || _wellKnownTypesMiscellaneous.IsExternalInit is not null 
-            && _wellKnownTypesMiscellaneous.RequiredMemberAttribute is not null
-            && _wellKnownTypesMiscellaneous.CompilerFeatureRequiredAttribute is not null
-            && _wellKnownTypesMiscellaneous.SetsRequiredMembersAttribute is not null)
+            || isExternalInit && requiredMemberAttribute && compilerFeatureRequiredAttribute && setsRequiredMembersAttribute)
             return null;
         var code = new StringBuilder();
-        if (_wellKnownTypesMiscellaneous.IsExternalInit is null
-            || _wellKnownTypesMiscellaneous.RequiredMemberAttribute is null
-            || _wellKnownTypesMiscellaneous.CompilerFeatureRequiredAttribute is null)
+        if (!isExternalInit || !requiredMemberAttribute || !compilerFeatureRequiredAttribute)
         {
             code.AppendLine(
                 """
@@ -39,7 +43,7 @@ internal sealed class RequiredKeywordUtility : IRequiredKeywordUtility, IContain
                 {
                 """);
 
-            if (_wellKnownTypesMiscellaneous.IsExternalInit is null)
+            if (!isExternalInit)
             {
                 code.AppendLine(
                     """
@@ -48,7 +52,7 @@ internal sealed class RequiredKeywordUtility : IRequiredKeywordUtility, IContain
                     """);
             }
             
-            if (_wellKnownTypesMiscellaneous.RequiredMemberAttribute is null)
+            if (!requiredMemberAttribute)
             {
                 code.AppendLine(
                     """
@@ -57,7 +61,7 @@ internal sealed class RequiredKeywordUtility : IRequiredKeywordUtility, IContain
                     """);
             }
             
-            if (_wellKnownTypesMiscellaneous.CompilerFeatureRequiredAttribute is null)
+            if (!compilerFeatureRequiredAttribute)
             {
                 code.AppendLine(
                     """
@@ -81,7 +85,7 @@ internal sealed class RequiredKeywordUtility : IRequiredKeywordUtility, IContain
             code.AppendLine("}");
         }
         
-        if (_wellKnownTypesMiscellaneous.SetsRequiredMembersAttribute is null)
+        if (!setsRequiredMembersAttribute)
         {
             code.AppendLine(
                 """
@@ -94,5 +98,12 @@ internal sealed class RequiredKeywordUtility : IRequiredKeywordUtility, IContain
         }
         
         return code.ToString();
+
+        bool CheckWhetherTypeIsAccessible(string fullyQualifiedName) =>
+            _compilation.GetTypesByMetadataName(fullyQualifiedName).Any(t =>
+                CustomSymbolEqualityComparer.Default.Equals(t.ContainingAssembly, _compilation.Assembly) &&
+                t.DeclaredAccessibility is Accessibility.Internal or Accessibility.Public
+                || t.DeclaredAccessibility is Accessibility.Public
+                || t.DeclaredAccessibility is Accessibility.Internal && _checkInternalsVisible.Check(t.ContainingAssembly));
     }
 }

@@ -1,5 +1,4 @@
 using MsMeeseeks.DIE.Configuration;
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Extensions;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Elements;

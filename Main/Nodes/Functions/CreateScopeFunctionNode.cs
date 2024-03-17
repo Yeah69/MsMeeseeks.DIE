@@ -1,4 +1,3 @@
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -22,7 +21,7 @@ internal sealed partial class CreateScopeFunctionNode : SingleFunctionNodeBase, 
         IReadOnlyList<ITypeSymbol> parameters,
         
         // dependencies
-        ITransientScopeWideContext transientScopeWideContext,
+        IRangeNode parentRange,
         IContainerNode parentContainer, 
         IReferenceGenerator referenceGenerator, 
         Func<IElementNodeMapper> typeToElementNodeMapperFactory,
@@ -38,7 +37,7 @@ internal sealed partial class CreateScopeFunctionNode : SingleFunctionNodeBase, 
             typeSymbol, 
             parameters,
             ImmutableDictionary.Create<ITypeSymbol, IParameterNode>(CustomSymbolEqualityComparer.IncludeNullability), 
-            transientScopeWideContext.Range, 
+            parentRange, 
             parentContainer, 
             parameterNodeFactory,
             plainFunctionCallNodeFactory,

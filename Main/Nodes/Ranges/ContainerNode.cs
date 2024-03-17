@@ -1,5 +1,4 @@
 using MsMeeseeks.DIE.Configuration;
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Extensions;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.MsContainer;
@@ -71,7 +70,7 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         _delegateBaseNodes.Add(delegateBaseNode);
 
     internal ContainerNode(
-        IContainerInfoContext containerInfoContext,
+        IContainerInfo containerInfo,
         Func<(INamedTypeSymbol?, INamedTypeSymbol), IUserDefinedElements> userDefinedElementsFactory,
         IReferenceGenerator referenceGenerator,
         IFunctionCycleTracker functionCycleTracker,
@@ -94,9 +93,9 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         Func<INamedTypeSymbol, IInitializedInstanceNode> initializedInstanceNodeFactory,
         Func<IMethodSymbol?, IVoidFunctionNode?, ICreateContainerFunctionNode> creatContainerFunctionNodeFactory)
         : base (
-            containerInfoContext.ContainerInfo.Name, 
-            containerInfoContext.ContainerInfo.ContainerType,
-            userDefinedElementsFactory((containerInfoContext.ContainerInfo.ContainerType, containerInfoContext.ContainerInfo.ContainerType)), 
+            containerInfo.Name, 
+            containerInfo.ContainerType,
+            userDefinedElementsFactory((containerInfo.ContainerType, containerInfo.ContainerType)), 
             mapperDataToFunctionKeyTypeConverter,
             typeParameterUtility,
             rangeUtility,
@@ -112,7 +111,7 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
             disposalHandlingNodeFactory,
             initializedInstanceNodeFactory)
     {
-        _containerInfo = containerInfoContext.ContainerInfo;
+        _containerInfo = containerInfo;
         _functionCycleTracker = functionCycleTracker;
         _currentExecutionPhaseSetter = currentExecutionPhaseSetter;
         _lazyTransientScopeInterfaceNode = lazyTransientScopeInterfaceNode;

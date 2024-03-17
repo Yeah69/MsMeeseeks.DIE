@@ -1,5 +1,4 @@
 using MsMeeseeks.DIE.Configuration;
-using MsMeeseeks.DIE.Contexts;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -22,7 +21,7 @@ internal sealed partial class MultiFunctionNode : MultiFunctionNodeBase, IMultiF
         INamedTypeSymbol enumerableType,
         IReadOnlyList<ITypeSymbol> parameters,
         IContainerNode parentContainer,
-        ITransientScopeWideContext transientScopeWideContext,
+        IRangeNode parentRange,
         IReferenceGenerator referenceGenerator,
         
         // dependencies
@@ -34,13 +33,13 @@ internal sealed partial class MultiFunctionNode : MultiFunctionNodeBase, IMultiF
         Func<IElementNodeMapper> typeToElementNodeMapperFactory,
         Func<IElementNodeMapperBase, (INamedTypeSymbol, INamedTypeSymbol), IOverridingElementNodeWithDecorationMapper> overridingElementNodeWithDecorationMapperFactory,
         ITypeParameterUtility typeParameterUtility,
+        ICheckTypeProperties checkTypeProperties,
         WellKnownTypes wellKnownTypes,
         WellKnownTypesCollections wellKnownTypesCollections)
         : base(
             enumerableType, 
             parameters, 
             parentContainer, 
-            transientScopeWideContext,
             parameterNodeFactory,
             plainFunctionCallNodeFactory,
             asyncFunctionCallNodeFactory,
@@ -49,11 +48,12 @@ internal sealed partial class MultiFunctionNode : MultiFunctionNodeBase, IMultiF
             typeToElementNodeMapperFactory,
             overridingElementNodeWithDecorationMapperFactory,
             typeParameterUtility,
+            parentRange,
             wellKnownTypes,
             wellKnownTypesCollections)
     {
         _enumerableType = enumerableType;
-        _checkTypeProperties = transientScopeWideContext.CheckTypeProperties;
+        _checkTypeProperties = checkTypeProperties;
         _wellKnownTypes = wellKnownTypes;
         Name = referenceGenerator.Generate("CreateMulti", _enumerableType);
     }
