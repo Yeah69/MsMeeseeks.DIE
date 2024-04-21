@@ -1,3 +1,4 @@
+using MsMeeseeks.DIE.CodeGeneration.Nodes;
 using MsMeeseeks.DIE.Logging;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -30,18 +31,24 @@ internal sealed partial class VoidFunctionNode : FunctionNodeBase, IVoidFunction
         IContainerNode parentContainer,
         IReferenceGenerator referenceGenerator,
         ILocalDiagLogger localDiagLogger,
+        IOuterFunctionSubDisposalNodeChooser subDisposalNodeChooser,
+        IEntryTransientScopeDisposalNodeChooser transientScopeDisposalNodeChooser,
+        Lazy<IFunctionNodeGenerator> functionNodeGenerator,
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
-        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, IScopeCallNode> scopeCallNodeFactory,
-        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<PlainFunctionCallNode.Params, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<WrappedAsyncFunctionCallNode.Params, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ScopeCallNode.Params, IScopeCallNode> scopeCallNodeFactory,
+        Func<TransientScopeCallNode.Params, ITransientScopeCallNode> transientScopeCallNodeFactory,
         WellKnownTypes wellKnownTypes)
         : base(
             Microsoft.CodeAnalysis.Accessibility.Internal, 
             parameters, 
             ImmutableDictionary.Create<ITypeSymbol, IParameterNode>(CustomSymbolEqualityComparer.IncludeNullability), 
             parentContainer, 
-            parentRange, 
+            parentRange,
+            subDisposalNodeChooser,
+            transientScopeDisposalNodeChooser,
+            functionNodeGenerator,
             parameterNodeFactory,
             plainFunctionCallNodeFactory,
             asyncFunctionCallNodeFactory,
@@ -148,7 +155,7 @@ internal sealed partial class VoidFunctionNode : FunctionNodeBase, IVoidFunction
             {
                 if (cycleFree.Contains(current))
                     return; // one of the previous roots checked this node already
-                if (visited.Contains(current))
+                if (!visited.Add(current))
                 {
                     var cycleStack = ImmutableStack.Create(current.TypeFullName);
                     IInitializedInstanceNode i;
@@ -163,7 +170,7 @@ internal sealed partial class VoidFunctionNode : FunctionNodeBase, IVoidFunction
                         Location.None);
                     throw new InitializedInstanceCycleDieException(cycleStack);
                 }
-                visited.Add(current);
+
                 stack.Push(current);
                 foreach (var neighbor in map[current])
                     DetectCycleInner(neighbor, visited, stack, cycleFree);

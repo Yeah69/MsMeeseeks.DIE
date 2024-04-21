@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis.Text;
 using MsMeeseeks.DIE.Logging;
 using MrMeeseeks.SourceGeneratorUtility.Extensions;
 
-namespace MsMeeseeks.DIE;
+namespace MsMeeseeks.DIE.CodeGeneration;
 
 internal interface IContainerDieExceptionGenerator 
 {

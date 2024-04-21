@@ -6,15 +6,27 @@ internal interface IPlainFunctionCallNode : IFunctionCallNode;
 
 internal sealed partial class PlainFunctionCallNode : FunctionCallNode, IPlainFunctionCallNode
 {
-    public PlainFunctionCallNode(
-        string? ownerReference,
-        IFunctionNode calledFunction,
-        ITypeSymbol callSideType,
-        IReadOnlyList<(IParameterNode, IParameterNode)> parameters,
-        IReadOnlyList<ITypeSymbol> typeParameters,
+    internal record struct Params(
+        ITypeSymbol CallSideType,
+        string? OwnerReference,
+        IReadOnlyList<(IParameterNode, IParameterNode)> Parameters,
+        IReadOnlyList<ITypeSymbol> TypeParameters,
+        IElementNode CallingSubDisposal,
+        IElementNode CallingTransientScopeDisposal);
+    internal PlainFunctionCallNode(
+        Params parameters,
         
+        IFunctionNode calledFunction,
         IReferenceGenerator referenceGenerator)
-        : base(ownerReference, calledFunction, callSideType, parameters, typeParameters, referenceGenerator)
+        : base(
+            parameters.OwnerReference,
+            parameters.CallSideType,
+            parameters.Parameters,
+            parameters.TypeParameters,
+            parameters.CallingSubDisposal,
+            parameters.CallingTransientScopeDisposal,
+            calledFunction,
+            referenceGenerator)
     {
     }
 }

@@ -1,7 +1,10 @@
-﻿using MsMeeseeks.DIE.Configuration;
+﻿using MsMeeseeks.DIE.CodeGeneration;
+using MsMeeseeks.DIE.Configuration;
 using MrMeeseeks.DIE.Configuration.Attributes;
+using MsMeeseeks.DIE.Logging;
+using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
-using MsMeeseeks.DIE.Utility;
+using MsMeeseeks.DIE.Nodes.Roots;
 
 // ReSharper disable InconsistentNaming
 
@@ -13,14 +16,20 @@ internal sealed partial class MsContainer
     private readonly Compilation DIE_Factory_Compilation;
     private readonly ContainerInfo DIE_Factory_ContainerInfo;
     private readonly RequiredKeywordUtility DIE_Factory_RequiredKeywordUtility;
+    private readonly DisposeUtility DIE_Factory_DisposeUtility;
+    private readonly ReferenceGeneratorCounter DIE_Factory_referenceGeneratorCounter;
 
     private MsContainer(
         GeneratorExecutionContext context, 
         ContainerInfo dieFactoryContainerInfo,
-        RequiredKeywordUtility dieFactoryRequiredKeywordUtility)
+        RequiredKeywordUtility dieFactoryRequiredKeywordUtility,
+        DisposeUtility dieFactoryDisposeUtility, 
+        ReferenceGeneratorCounter dieFactoryReferenceGeneratorCounter)
     {
         DIE_Factory_ContainerInfo = dieFactoryContainerInfo;
         DIE_Factory_RequiredKeywordUtility = dieFactoryRequiredKeywordUtility;
+        DIE_Factory_DisposeUtility = dieFactoryDisposeUtility;
+        DIE_Factory_referenceGeneratorCounter = dieFactoryReferenceGeneratorCounter;
         DIE_Factory_Compilation = context.Compilation;
         DIE_Factory_GeneratorExecutionContext = context;
     }
@@ -51,7 +60,6 @@ internal sealed partial class MsContainer
     private WellKnownTypesMiscellaneous DIE_Factory_WellKnownTypesMiscellaneous() => 
         WellKnownTypesMiscellaneous.Create(DIE_Factory_Compilation);
 
-    [InitializedInstances(typeof(ReferenceGenerator))]
     private abstract class ScopeObject;
     
     private abstract class TransientScopeBase : ScopeObject
@@ -64,7 +72,7 @@ internal sealed partial class MsContainer
     }
 
     private sealed partial class DIE_TransientScope_ScopeNodeRoot : TransientScopeBase;
-
+    
     private sealed partial class DIE_TransientScope_TransientScopeNodeRoot : TransientScopeBase;
 
     private abstract class ScopeBase : ScopeObject

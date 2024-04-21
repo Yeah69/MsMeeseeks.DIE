@@ -11,32 +11,38 @@ internal interface ITransientScopeCallNode : IScopeCallNodeBase
 
 internal sealed partial class TransientScopeCallNode : ScopeCallNodeBase, ITransientScopeCallNode
 {
+    internal record struct Params(
+        ITypeSymbol CallSideType, 
+        string ContainerParameter,
+        ITransientScopeNode Scope,
+        IRangeNode CallingRange,
+        IFunctionNode CallingFunction,
+        IElementNode CallingTransientScopeDisposal,
+        IReadOnlyList<(IParameterNode, IParameterNode)> Parameters,
+        IReadOnlyList<ITypeSymbol> TypeParameters,
+        IFunctionCallNode? Initialization,
+        ScopeCallNodeOuterMapperParam OuterMapperParam);
     internal TransientScopeCallNode(
-        string containerParameter, 
-        ITransientScopeNode scope,
-        IContainerNode parentContainer,
-        IRangeNode callingRange,
-        IFunctionNode calledFunction,
-        ITypeSymbol callSideType,
-        IReadOnlyList<(IParameterNode, IParameterNode)> parameters,
-        IReadOnlyList<ITypeSymbol> typeParameters,
-        IFunctionCallNode? initialization,
-        ScopeCallNodeOuterMapperParam outerMapperParam,
+        Params parameters,
         
+        IContainerNode parentContainer,
+        IFunctionNode calledFunction,
         IReferenceGenerator referenceGenerator) 
         : base(
-            callSideType,
-            scope,
-            parameters,
-            typeParameters,
-            initialization,
-            outerMapperParam,
+            parameters.CallSideType,
+            parameters.Scope,
+            parameters.Parameters,
+            parameters.TypeParameters,
+            parameters.Initialization,
+            parameters.OuterMapperParam,
+            parameters.CallingTransientScopeDisposal,
             calledFunction,
             referenceGenerator)
     {
-        ContainerReference = callingRange.ContainerReference;
+        ContainerReference = parameters.CallingRange.ContainerReference;
         TransientScopeDisposalReference = parentContainer.TransientScopeDisposalReference;
-        AdditionalPropertiesForConstruction = [(scope.ContainerReference ?? "", containerParameter)];
+        AdditionalPropertiesForConstruction = [(parameters.Scope.ContainerReference ?? "", parameters.ContainerParameter)];
+        parameters.CallingFunction.AddOneToTransientScopeDisposalCount();
     }
 
     protected override (string Name, string Reference)[] AdditionalPropertiesForConstruction { get; }

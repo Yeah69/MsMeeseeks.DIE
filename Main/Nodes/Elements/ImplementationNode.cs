@@ -17,8 +17,8 @@ internal interface IImplementationNode : IElementNode, IAwaitableNode
     ImplementationNode.UserDefinedInjection? UserDefinedInjectionProperties { get; }
     IReadOnlyList<(string Name, IElementNode Element)> Properties { get; }
     ImplementationNode.Initialization? Initializer { get; }
-    string? SyncDisposalCollectionReference { get; }
-    string? AsyncDisposalCollectionReference { get; }
+    string SubDisposalReference { get; }
+    bool AggregateForDisposal { get; }
     
     string? AsyncReference { get; }
     string? AsyncTypeFullName { get; }
@@ -90,6 +90,7 @@ internal sealed partial class ImplementationNode : IImplementationNode
         // The constructor call shouldn't contain nullable annotations
         ConstructorCallName = implementationType.FullName(SymbolDisplayMiscellaneousOptions.None);
         Reference = referenceGenerator.Generate(implementationType);
+        SubDisposalReference = parentFunction.SubDisposalNode.Reference;
     }
 
     public void Build(PassedContext passedContext)
@@ -190,10 +191,12 @@ internal sealed partial class ImplementationNode : IImplementationNode
         }
 
         var disposalType = _checkTypeProperties.ShouldDisposalBeManaged(_implementationType);
-        if (disposalType.HasFlag(DisposalType.Sync))
-            SyncDisposalCollectionReference = _parentRange.DisposalHandling.RegisterSyncDisposal();
-        if (disposalType.HasFlag(DisposalType.Async))
-            AsyncDisposalCollectionReference = _parentRange.DisposalHandling.RegisterAsyncDisposal();
+        if (disposalType is not DisposalType.None)
+        {
+            _parentRange.RegisterTypeForDisposal(_implementationType);
+            _parentFunction.AddOneToSubDisposalCount();
+        }
+        AggregateForDisposal = disposalType is not DisposalType.None;
         
         foreach (var sameTypeInjections in injectionsAnalysisGathering
                      .GroupBy(t => t.Type, CustomSymbolEqualityComparer.IncludeNullability)
@@ -388,8 +391,8 @@ internal sealed partial class ImplementationNode : IImplementationNode
         private set;
     }
 
-    public string? SyncDisposalCollectionReference { get; private set; }
-    public string? AsyncDisposalCollectionReference { get; private set; }
+    public string SubDisposalReference { get; }
+    public bool AggregateForDisposal { get; private set; }
 
     public bool Awaited { get; private set; }
     public string? AsyncReference { get; private set; }

@@ -1,5 +1,10 @@
 ﻿namespace System.Runtime.CompilerServices
 {
+    [global::System.ComponentModel.EditorBrowsable(global::System.ComponentModel.EditorBrowsableState.Never)]
+    internal static class IsExternalInit
+    {
+    }
+
     [global::System.AttributeUsage(global::System.AttributeTargets.Class | global::System.AttributeTargets.Struct | global::System.AttributeTargets.Field | global::System.AttributeTargets.Property, AllowMultiple = false, Inherited = false)]
     internal sealed class RequiredMemberAttribute : global::System.Attribute
     {

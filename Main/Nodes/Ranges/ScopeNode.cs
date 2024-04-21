@@ -1,3 +1,5 @@
+using MsMeeseeks.DIE.CodeGeneration;
+using MsMeeseeks.DIE.CodeGeneration.Nodes;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Extensions;
 using MsMeeseeks.DIE.Mappers;
@@ -23,8 +25,9 @@ internal interface IScopeNode : IScopeNodeBase
         IElementNodeMapperBase scopeImplementationMapper);
 }
 
-internal sealed partial class ScopeNode : ScopeNodeBase, IScopeNode, ITransientScopeInstance
+internal sealed partial class ScopeNode : ScopeNodeBase, IScopeNode, IScopeInstance
 {
+    private readonly Lazy<IScopeNodeGenerator> _scopeNodeGenerator;
     private readonly Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateScopeFunctionNodeRoot> _createScopeFunctionNodeFactory;
 
     internal ScopeNode(
@@ -37,10 +40,12 @@ internal sealed partial class ScopeNode : ScopeNodeBase, IScopeNode, ITransientS
         ITypeParameterUtility typeParameterUtility,
         IRangeUtility rangeUtility,
         IRequiredKeywordUtility requiredKeywordUtility,
+        ICheckTypeProperties checkTypeProperties,
         WellKnownTypes wellKnownTypes,
         WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous,
         IMapperDataToFunctionKeyTypeConverter mapperDataToFunctionKeyTypeConverter,
-        Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateFunctionNodeRoot> createFunctionNodeFactory,
+        Lazy<IScopeNodeGenerator> scopeNodeGenerator,
+        Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ImplementationMappingConfiguration?, ICreateFunctionNodeRoot> createFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiFunctionNodeRoot> multiFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueFunctionNodeRoot> multiKeyValueFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueMultiFunctionNodeRoot> multiKeyValueMultiFunctionNodeFactory,
@@ -58,6 +63,7 @@ internal sealed partial class ScopeNode : ScopeNodeBase, IScopeNode, ITransientS
             typeParameterUtility,
             rangeUtility,
             requiredKeywordUtility,
+            checkTypeProperties,
             wellKnownTypes,
             wellKnownTypesMiscellaneous,
             mapperDataToFunctionKeyTypeConverter,
@@ -70,12 +76,15 @@ internal sealed partial class ScopeNode : ScopeNodeBase, IScopeNode, ITransientS
             disposalHandlingNodeFactory,
             initializedInstanceNodeFactory)
     {
+        _scopeNodeGenerator = scopeNodeGenerator;
         _createScopeFunctionNodeFactory = createScopeFunctionNodeFactory;
         TransientScopeInterfaceFullName = $"{parentContainer.Namespace}.{parentContainer.Name}.{transientScopeInterfaceNode.Name}";
         TransientScopeInterfaceReference = referenceGenerator.Generate("TransientScope");
     }
     protected override string ContainerParameterForScope => ContainerReference;
     protected override string TransientScopeInterfaceParameterForScope => TransientScopeInterfaceReference;
+
+    public override INodeGenerator GetGenerator() => _scopeNodeGenerator.Value;
 
     public override IFunctionCallNode BuildContainerInstanceCall(INamedTypeSymbol type, IFunctionNode callingFunction) => 
         ParentContainer.BuildContainerInstanceCall(ContainerReference, type, callingFunction);

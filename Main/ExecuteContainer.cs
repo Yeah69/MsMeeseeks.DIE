@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 using MsMeeseeks.DIE.Analytics;
+using MsMeeseeks.DIE.CodeGeneration;
 using MsMeeseeks.DIE.Logging;
 using MsMeeseeks.DIE.Nodes;
 using MsMeeseeks.DIE.Nodes.Ranges;

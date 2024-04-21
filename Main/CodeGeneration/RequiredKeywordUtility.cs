@@ -1,7 +1,7 @@
 using MsMeeseeks.DIE.MsContainer;
 using MrMeeseeks.SourceGeneratorUtility;
 
-namespace MsMeeseeks.DIE.Utility;
+namespace MsMeeseeks.DIE.CodeGeneration;
 
 internal interface IRequiredKeywordUtility
 {
@@ -39,6 +39,7 @@ internal sealed class RequiredKeywordUtility : IRequiredKeywordUtility, IContain
         {
             code.AppendLine(
                 """
+                #nullable enable
                 namespace System.Runtime.CompilerServices
                 {
                 """);
@@ -96,6 +97,8 @@ internal sealed class RequiredKeywordUtility : IRequiredKeywordUtility, IContain
                 }
                 """);
         }
+        
+        code.AppendLine("#nullable disable");
         
         return code.ToString();
 

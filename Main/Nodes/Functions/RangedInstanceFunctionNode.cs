@@ -1,3 +1,4 @@
+using MsMeeseeks.DIE.CodeGeneration.Nodes;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.MsContainer;
@@ -9,7 +10,10 @@ using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE.Nodes.Functions;
 
-internal interface IRangedInstanceFunctionNode : ISingleFunctionNode;
+internal interface IRangedInstanceFunctionNode : ISingleFunctionNode
+{
+    IRangedInstanceFunctionGroupNode? Group { get; set; }
+}
 
 internal interface IRangedInstanceFunctionNodeInitializer
 {
@@ -34,11 +38,14 @@ internal sealed partial class RangedInstanceFunctionNode : SingleFunctionNodeBas
         IRangeNode parentRange,
         IContainerNode parentContainer, 
         IReferenceGenerator referenceGenerator, 
+        IOuterFunctionSubDisposalNodeChooser subDisposalNodeChooser,
+        IEntryTransientScopeDisposalNodeChooser transientScopeDisposalNodeChooser,
+        Lazy<IFunctionNodeGenerator> functionNodeGenerator,
         Func<IElementNodeMapper> typeToElementNodeMapperFactory,
-        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, IScopeCallNode> scopeCallNodeFactory,
-        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<PlainFunctionCallNode.Params, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<WrappedAsyncFunctionCallNode.Params, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ScopeCallNode.Params, IScopeCallNode> scopeCallNodeFactory,
+        Func<TransientScopeCallNode.Params, ITransientScopeCallNode> transientScopeCallNodeFactory,
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
         ITypeParameterUtility typeParameterUtility,
         WellKnownTypes wellKnownTypes) 
@@ -49,6 +56,9 @@ internal sealed partial class RangedInstanceFunctionNode : SingleFunctionNodeBas
             ImmutableDictionary.Create<ITypeSymbol, IParameterNode>(CustomSymbolEqualityComparer.IncludeNullability), 
             parentRange, 
             parentContainer, 
+            subDisposalNodeChooser,
+            transientScopeDisposalNodeChooser,
+            functionNodeGenerator,
             parameterNodeFactory,
             plainFunctionCallNodeFactory,
             asyncFunctionCallNodeFactory,
@@ -68,7 +78,7 @@ internal sealed partial class RangedInstanceFunctionNode : SingleFunctionNodeBas
     protected override IElementNode MapToReturnedElement(IElementNodeMapperBase mapper) => 
         // "MapToImplementation" instead of "Map", because latter would cause an infinite recursion ever trying to create a new ranged instance function
         mapper.MapToImplementation(
-            new(true, false, false), 
+            new(CheckForScopeRoot: true, CheckForRangedInstance: false, CheckForInitializedInstance: true), 
             null, 
             _type,
             new(ImmutableStack<INamedTypeSymbol>.Empty, null)); 
@@ -82,4 +92,6 @@ internal sealed partial class RangedInstanceFunctionNode : SingleFunctionNodeBas
         Name = name;
         ExplicitInterfaceFullName = explicitInterfaceFullName;
     }
+
+    public IRangedInstanceFunctionGroupNode? Group { get; set; }
 }

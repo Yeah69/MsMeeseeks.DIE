@@ -1,3 +1,4 @@
+using MsMeeseeks.DIE.CodeGeneration.Nodes;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Logging;
 using MsMeeseeks.DIE.Mappers;
@@ -30,11 +31,14 @@ internal sealed partial class MultiKeyValueMultiFunctionNode : MultiFunctionNode
         IRangeNode parentRange,
         IReferenceGenerator referenceGenerator,
         ILocalDiagLogger localDiagLogger,
+        IInnerFunctionSubDisposalNodeChooser subDisposalNodeChooser,
+        IInnerTransientScopeDisposalNodeChooser transientScopeDisposalNodeChooser,
+        Lazy<IFunctionNodeGenerator> functionNodeGenerator,
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
-        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, IScopeCallNode> scopeCallNodeFactory,
-        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<PlainFunctionCallNode.Params, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<WrappedAsyncFunctionCallNode.Params, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ScopeCallNode.Params, IScopeCallNode> scopeCallNodeFactory,
+        Func<TransientScopeCallNode.Params, ITransientScopeCallNode> transientScopeCallNodeFactory,
         Func<IElementNodeMapper> typeToElementNodeMapperFactory,
         Func<IElementNodeMapperBase, (INamedTypeSymbol, INamedTypeSymbol), IOverridingElementNodeWithDecorationMapper> overridingElementNodeWithDecorationMapperFactory,
         Func<INamedTypeSymbol, object, IElementNode, IKeyValuePairNode> keyValuePairNodeFactory,
@@ -45,7 +49,10 @@ internal sealed partial class MultiKeyValueMultiFunctionNode : MultiFunctionNode
         : base(
             enumerableType, 
             parameters, 
-            parentContainer, 
+            parentContainer,
+            subDisposalNodeChooser,
+            transientScopeDisposalNodeChooser,
+            functionNodeGenerator,
             parameterNodeFactory,
             plainFunctionCallNodeFactory,
             asyncFunctionCallNodeFactory,

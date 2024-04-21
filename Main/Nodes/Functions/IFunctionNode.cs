@@ -1,3 +1,4 @@
+using MsMeeseeks.DIE.CodeGeneration.Nodes;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.Nodes.Elements;
 using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
@@ -9,6 +10,7 @@ internal interface IFunctionNode : INode
 {
     Accessibility? Accessibility { get; }
     SynchronicityDecision SynchronicityDecision { get; }
+    SynchronicityDecisionKind SynchronicityDecisionKind { get; }
     string Name { get; }
     IReadOnlyList<(ITypeSymbol Type, IParameterNode Node)> Parameters { get; }
     ImmutableDictionary<ITypeSymbol, IParameterNode> Overrides { get; }
@@ -23,13 +25,26 @@ internal interface IFunctionNode : INode
     void RegisterCalledFunction(IFunctionNode calledFunction);
     void RegisterCallingFunction(IFunctionNode callingFunction);
     void RegisterUsedInitializedInstance(IInitializedInstanceNode initializedInstance);
+    void AddOneToSubDisposalCount();
+    int GetSubDisposalCount();
+    void AddOneToTransientScopeDisposalCount();
+    int GetTransientScopeDisposalCount();
     void CheckSynchronicity();
     void ForceToAsync();
     string RangeFullName { get; }
-    string DisposedPropertyReference { get; }
     IReadOnlyList<ILocalFunctionNode> LocalFunctions { get; }
     void AddLocalFunction(ILocalFunctionNode function);
     string? ExplicitInterfaceFullName { get; }
+    IElementNode SubDisposalNode { get; }
+    IElementNode TransientScopeDisposalNode { get; }
+    /// <summary>
+    /// Sub disposal is passed is either passed as parameter or initialized in the function body (in entry functions).
+    /// </summary>
+    bool IsSubDisposalAsParameter { get; }
+    /// <summary>
+    /// Transient scope disposal is passed is either passed as parameter or initialized in the function body (in entry functions).
+    /// </summary>
+    bool IsTransientScopeDisposalAsParameter { get; }
 
     IFunctionCallNode CreateCall(
         ITypeSymbol callSideType,
@@ -59,8 +74,8 @@ internal interface IFunctionNode : INode
         ITransientScopeNode scopeNode,
         IReadOnlyList<ITypeSymbol> typeParameters,
         IElementNodeMapperBase transientScopeImplementationMapper);
-    bool CheckIfReturnedType(ITypeSymbol type);
 
     bool TryGetReusedNode(ITypeSymbol type, out IReusedNode? reusedNode);
     void AddReusedNode(ITypeSymbol type, IReusedNode reusedNode);
+    INodeGenerator GetGenerator();
 }

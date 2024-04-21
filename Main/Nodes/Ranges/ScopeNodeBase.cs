@@ -1,3 +1,4 @@
+using MsMeeseeks.DIE.CodeGeneration;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -13,7 +14,6 @@ internal interface IScopeNodeBase : IRangeNode
 {
     INamedTypeSymbol? ImplementationType { get; }
     string ContainerFullName { get; }
-    bool GenerateEmptyConstructor { get; }
 }
 
 internal abstract class ScopeNodeBase : RangeNode, IScopeNodeBase
@@ -27,10 +27,11 @@ internal abstract class ScopeNodeBase : RangeNode, IScopeNodeBase
         ITypeParameterUtility typeParameterUtility,
         IRangeUtility rangeUtility,
         IRequiredKeywordUtility requiredKeywordUtility,
+        ICheckTypeProperties checkTypeProperties,
         WellKnownTypes wellKnownTypes,
         WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous,
         IMapperDataToFunctionKeyTypeConverter mapperDataToFunctionKeyTypeConverter,
-        Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateFunctionNodeRoot> createFunctionNodeFactory,
+        Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ImplementationMappingConfiguration?, ICreateFunctionNodeRoot> createFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiFunctionNodeRoot> multiFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueFunctionNodeRoot> multiKeyValueFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueMultiFunctionNodeRoot> multiKeyValueMultiFunctionNodeFactory,
@@ -45,6 +46,7 @@ internal abstract class ScopeNodeBase : RangeNode, IScopeNodeBase
             mapperDataToFunctionKeyTypeConverter,
             typeParameterUtility,
             rangeUtility,
+            checkTypeProperties,
             wellKnownTypes,
             wellKnownTypesMiscellaneous,
             referenceGenerator,
@@ -77,9 +79,8 @@ internal abstract class ScopeNodeBase : RangeNode, IScopeNodeBase
         ParentContainer.BuildContainerInstanceCall(ContainerReference, type, callingFunction);
 
     public override string FullName { get; }
-    public override DisposalType DisposalType => ParentContainer.DisposalType;
     public INamedTypeSymbol? ImplementationType { get; }
     public string ContainerFullName { get; }
-    public bool GenerateEmptyConstructor { get; }
+    public override bool GenerateEmptyConstructor { get; }
     public override string ContainerReference { get; }
 }

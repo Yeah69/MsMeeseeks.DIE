@@ -1,4 +1,6 @@
-﻿using MsMeeseeks.DIE.Utility;
+﻿using MsMeeseeks.DIE.CodeGeneration;
+using MsMeeseeks.DIE.Logging;
+using MsMeeseeks.DIE.Utility;
 using MrMeeseeks.SourceGeneratorUtility;
 
 namespace MsMeeseeks.DIE;
@@ -15,14 +17,27 @@ public class SourceGenerator : ISourceGenerator
     {
         try
         {
+            var wellKnownTypes = WellKnownTypes.Create(context.Compilation);
+            var wellKnownTypesCollections = WellKnownTypesCollections.Create(context.Compilation);
             var wellKnownTypesMiscellaneous = WellKnownTypesMiscellaneous.Create(context.Compilation);
             var rangeUtility = new RangeUtility(wellKnownTypesMiscellaneous);
             var requiredKeywordUtility = new RequiredKeywordUtility(context, new CheckInternalsVisible(context));
+            var referenceGeneratorCounter = new ReferenceGeneratorCounter();
+            var singularDisposeFunctionUtility = new DisposeUtility(
+                new ReferenceGenerator(
+                    referenceGeneratorCounter, 
+                    new LocalDiagLogger(
+                        new FunctionLevelLogMessageEnhancerForSourceGenerator(), 
+                        new DiagLogger(new GeneratorConfiguration(context, wellKnownTypesMiscellaneous), context))), 
+                wellKnownTypes,
+                wellKnownTypesCollections);
 
             var execute = new ExecuteImpl(
                 context,
                 rangeUtility,
                 requiredKeywordUtility,
+                singularDisposeFunctionUtility,
+                referenceGeneratorCounter,
                 ContainerInfoFactory);
             execute.Execute();
                 

@@ -1,3 +1,4 @@
+using MsMeeseeks.DIE.CodeGeneration.Nodes;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.MsContainer;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -25,12 +26,15 @@ internal sealed partial class CreateTransientScopeFunctionNode : SingleFunctionN
         IRangeNode parentRange,
         IContainerNode parentContainer, 
         IReferenceGenerator referenceGenerator, 
+        IOuterFunctionSubDisposalNodeChooser subDisposalNodeChooser,
+        IInnerTransientScopeDisposalNodeChooser transientScopeDisposalNodeChooser,
+        Lazy<IFunctionNodeGenerator> functionNodeGenerator,
         Func<IElementNodeMapper> typeToElementNodeMapperFactory,
         Func<IElementNodeMapperBase, ITransientScopeDisposalElementNodeMapper> transientScopeDisposalElementNodeMapperFactory,
-        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, IScopeCallNode> scopeCallNodeFactory,
-        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<PlainFunctionCallNode.Params, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<WrappedAsyncFunctionCallNode.Params, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ScopeCallNode.Params, IScopeCallNode> scopeCallNodeFactory,
+        Func<TransientScopeCallNode.Params, ITransientScopeCallNode> transientScopeCallNodeFactory,
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
         ITypeParameterUtility typeParameterUtility,
         WellKnownTypes wellKnownTypes) 
@@ -41,6 +45,9 @@ internal sealed partial class CreateTransientScopeFunctionNode : SingleFunctionN
             ImmutableDictionary.Create<ITypeSymbol, IParameterNode>(CustomSymbolEqualityComparer.IncludeNullability), 
             parentRange, 
             parentContainer, 
+            subDisposalNodeChooser,
+            transientScopeDisposalNodeChooser,
+            functionNodeGenerator,
             parameterNodeFactory,
             plainFunctionCallNodeFactory,
             asyncFunctionCallNodeFactory,

@@ -8,9 +8,14 @@ internal enum AsyncFunctionCallTransformation
     ValueTaskFromValueTask,
     ValueTaskFromTask,
     ValueTaskFromSync,
+    ValueTaskFromForcedTask,
+    ValueTaskFromForcedValueTask,
     TaskFromValueTask,
     TaskFromTask,
-    TaskFromSync
+    TaskFromSync,
+    TaskFromForcedTask,
+    TaskFromForcedValueTask,
+    
 }
 
 internal interface IWrappedAsyncFunctionCallNode : IFunctionCallNode
@@ -23,34 +28,44 @@ internal sealed partial class WrappedAsyncFunctionCallNode : IWrappedAsyncFuncti
 {
     private readonly IFunctionNode _calledFunction;
 
-    public WrappedAsyncFunctionCallNode(
-        ITypeSymbol wrappedType,
-        string? ownerReference,
-        SynchronicityDecision synchronicityDecision,
-        IFunctionNode calledFunction,
-        IReadOnlyList<(IParameterNode, IParameterNode)> parameters,
-        IReadOnlyList<ITypeSymbol> typeParameters,
+    internal record struct Params(
+        ITypeSymbol WrappedType,
+        string? OwnerReference,
+        SynchronicityDecision SynchronicityDecision,
+        IReadOnlyList<(IParameterNode, IParameterNode)> Parameters,
+        IReadOnlyList<ITypeSymbol> TypeParameters,
+        IElementNode CallingSubDisposal,
+        IElementNode CallingTransientScopeDisposal);
+    internal WrappedAsyncFunctionCallNode(
+        Params parameters,
         
+        IFunctionNode calledFunction,
         IReferenceGenerator referenceGenerator,
         WellKnownTypes wellKnownTypes)
     {
-        OwnerReference = ownerReference;
+        OwnerReference = parameters.OwnerReference;
         FunctionName = calledFunction.Name;
-        Parameters = parameters;
-        TypeParameters = typeParameters;
-        SynchronicityDecision = synchronicityDecision;
+        Parameters = parameters.Parameters;
+        TypeParameters = parameters.TypeParameters;
+        SynchronicityDecision = parameters.SynchronicityDecision;
         _calledFunction = calledFunction;
-        Transformation = synchronicityDecision is SynchronicityDecision.AsyncValueTask
+        Transformation = parameters.SynchronicityDecision is SynchronicityDecision.AsyncValueTask
             ? AsyncFunctionCallTransformation.ValueTaskFromValueTask
             : AsyncFunctionCallTransformation.TaskFromTask;
 
-        var asyncType = synchronicityDecision is SynchronicityDecision.AsyncValueTask
+        var asyncType = parameters.SynchronicityDecision is SynchronicityDecision.AsyncValueTask
             ? wellKnownTypes.ValueTask1 is not null 
-                ? wellKnownTypes.ValueTask1.Construct(wrappedType)
+                ? wellKnownTypes.ValueTask1.Construct(parameters.WrappedType)
                 : throw new InvalidOperationException("ValueTask1 is not available")
-            : wellKnownTypes.Task1.Construct(wrappedType);
+            : wellKnownTypes.Task1.Construct(parameters.WrappedType);
         Reference = referenceGenerator.Generate(asyncType);
         TypeFullName = asyncType.FullName();
+        SubDisposalParameter = !calledFunction.IsSubDisposalAsParameter
+            ? null 
+            : (parameters.CallingSubDisposal, calledFunction.SubDisposalNode);
+        TransientScopeDisposalParameter = !calledFunction.IsTransientScopeDisposalAsParameter
+            ? null
+            : (parameters.CallingTransientScopeDisposal, calledFunction.TransientScopeDisposalNode);
     }
 
     public void Build(PassedContext passedContext) { }
@@ -61,11 +76,23 @@ internal sealed partial class WrappedAsyncFunctionCallNode : IWrappedAsyncFuncti
     {
         Transformation = (SynchronicityDecision, _calledFunction.SynchronicityDecision) switch
         {
-            (SynchronicityDecision.AsyncValueTask, SynchronicityDecision.AsyncValueTask) => AsyncFunctionCallTransformation.ValueTaskFromValueTask,
-            (SynchronicityDecision.AsyncValueTask, SynchronicityDecision.AsyncTask) => AsyncFunctionCallTransformation.ValueTaskFromTask,
+            (SynchronicityDecision.AsyncValueTask, SynchronicityDecision.AsyncValueTask) 
+                => _calledFunction.SynchronicityDecisionKind is SynchronicityDecisionKind.AsyncForced 
+                    ? AsyncFunctionCallTransformation.ValueTaskFromForcedValueTask
+                    : AsyncFunctionCallTransformation.ValueTaskFromValueTask,
+            (SynchronicityDecision.AsyncValueTask, SynchronicityDecision.AsyncTask)
+                => _calledFunction.SynchronicityDecisionKind is SynchronicityDecisionKind.AsyncForced 
+                    ? AsyncFunctionCallTransformation.ValueTaskFromForcedTask
+                    : AsyncFunctionCallTransformation.ValueTaskFromTask,
             (SynchronicityDecision.AsyncValueTask, SynchronicityDecision.Sync) => AsyncFunctionCallTransformation.ValueTaskFromSync,
-            (SynchronicityDecision.AsyncTask, SynchronicityDecision.AsyncValueTask) => AsyncFunctionCallTransformation.TaskFromValueTask,
-            (SynchronicityDecision.AsyncTask, SynchronicityDecision.AsyncTask) => AsyncFunctionCallTransformation.TaskFromTask,
+            (SynchronicityDecision.AsyncTask, SynchronicityDecision.AsyncValueTask) 
+                => _calledFunction.SynchronicityDecisionKind is SynchronicityDecisionKind.AsyncForced 
+                    ? AsyncFunctionCallTransformation.TaskFromForcedValueTask
+                    : AsyncFunctionCallTransformation.TaskFromValueTask,
+            (SynchronicityDecision.AsyncTask, SynchronicityDecision.AsyncTask) 
+                => _calledFunction.SynchronicityDecisionKind is SynchronicityDecisionKind.AsyncForced 
+                    ? AsyncFunctionCallTransformation.TaskFromForcedTask
+                    : AsyncFunctionCallTransformation.TaskFromTask,
             (SynchronicityDecision.AsyncTask, SynchronicityDecision.Sync) => AsyncFunctionCallTransformation.TaskFromSync,
             _ => Transformation
         };
@@ -77,6 +104,8 @@ internal sealed partial class WrappedAsyncFunctionCallNode : IWrappedAsyncFuncti
     public string? OwnerReference { get; }
     public string FunctionName { get; }
     public IReadOnlyList<(IParameterNode, IParameterNode)> Parameters { get; }
+    public (IElementNode Calling, IElementNode Called)? SubDisposalParameter { get; }
+    public (IElementNode Calling, IElementNode Called)? TransientScopeDisposalParameter { get; }
     public IReadOnlyList<ITypeSymbol> TypeParameters { get; }
     public IFunctionNode CalledFunction => _calledFunction;
     public bool Awaited => false; // never awaited, because it's a wrapped async function call

@@ -31,5 +31,7 @@ internal static class Constants
     internal const string CreateFunctionSuffixAsync = "Async";
     internal const string CreateFunctionSuffixValueAsync = "ValueAsync";
 
+    // ReSharper disable once InconsistentNaming
     internal const string IAsyncDisposableDisposeAsync = "DisposeAsync"; // Needed because .NET Standard 2.0 doesn't have IAsyncDisposable
+    internal const string NamespaceForGeneratedStatics = "MsMeeseeks.DIE";
 }

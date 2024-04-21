@@ -1,3 +1,4 @@
+using MsMeeseeks.DIE.CodeGeneration.Nodes;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Extensions;
 using MsMeeseeks.DIE.Mappers;
@@ -16,14 +17,14 @@ internal interface IRangeNode : INode
 {
     string FullName { get; }
     string Name { get; }
-    DisposalType DisposalType { get; }
     IDisposalHandlingNode DisposalHandling { get; }
     IMethodSymbol? AddForDisposal { get; }
     IMethodSymbol? AddForDisposalAsync { get; }
     string? ContainerReference { get; }
     IEnumerable<IInitializedInstanceNode> InitializedInstances { get; }
+    string ResolutionCounterReference { get; }
 
-    IFunctionCallNode BuildCreateCall(ITypeSymbol type, IFunctionNode callingFunction);
+    IFunctionCallNode BuildCreateCall(ITypeSymbol type, IFunctionNode callingFunction, ImplementationMappingConfiguration? implementationMappingConfiguration = null);
     IWrappedAsyncFunctionCallNode BuildAsyncCreateCall(
         MapperData mapperData, 
         ITypeSymbol type,
@@ -55,26 +56,41 @@ internal interface IRangeNode : INode
     IFunctionCallNode BuildInitializationCall(IFunctionNode callingFunction);
 
     void CycleDetectionAndReorderingOfInitializedInstances();
+
+    string DisposeChunkMethodName { get; }
+    string DisposeChunkAsyncMethodName { get; }
+    string DisposeExceptionHandlingMethodName { get; }
+    string DisposeExceptionHandlingAsyncMethodName { get; }
+    void RegisterTypeForDisposal(INamedTypeSymbol type);
+    IReadOnlyDictionary<DisposalType, IReadOnlyList<INamedTypeSymbol>> GetDisposalTypeToTypeFullNames();
+    INodeGenerator GetGenerator();
+    bool GenerateEmptyConstructor { get; }
 }
 
 internal abstract class RangeNode : IRangeNode
 {
     private readonly IMapperDataToFunctionKeyTypeConverter _mapperDataToFunctionKeyTypeConverter;
     protected readonly ITypeParameterUtility TypeParameterUtility;
+    private readonly ICheckTypeProperties _checkTypeProperties;
     private readonly IReferenceGenerator _referenceGenerator;
-    private readonly Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateFunctionNodeRoot> _createFunctionNodeFactory;
+    private readonly Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ImplementationMappingConfiguration?, ICreateFunctionNodeRoot> _createFunctionNodeFactory;
     private readonly Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiFunctionNodeRoot> _multiFunctionNodeFactory;
     private readonly Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueFunctionNodeRoot> _multiKeyValueFunctionNodeFactory;
     private readonly Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueMultiFunctionNodeRoot> _multiKeyValueMultiFunctionNodeFactory;
     private readonly Func<ScopeLevel, INamedTypeSymbol, IRangedInstanceFunctionGroupNode> _rangedInstanceFunctionGroupNodeFactory;
     protected readonly Func<IReadOnlyList<IInitializedInstanceNode>, IReadOnlyList<ITypeSymbol>, IVoidFunctionNodeRoot> VoidFunctionNodeFactory;
+    // ReSharper disable once InconsistentNaming
     protected readonly Dictionary<ITypeSymbol, List<ICreateFunctionNodeBase>> _createFunctions = new(MatchTypeParametersSymbolEqualityComparer.IncludeNullability);
     private readonly Dictionary<ITypeSymbol, List<IMultiFunctionNodeBase>> _multiFunctions = new(MatchTypeParametersSymbolEqualityComparer.IncludeNullability);
     private readonly Dictionary<ITypeSymbol, Dictionary<object, Dictionary<ITypeSymbol, List<IMultiFunctionNodeBase>>>> _keyedMultiFunctions = 
         new(MatchTypeParametersSymbolEqualityComparer.IncludeNullability);
 
+    private readonly HashSet<INamedTypeSymbol> _aggregatedTypesForDisposal = 
+        new(CustomSymbolEqualityComparer.IncludeNullability);
+
     private readonly Dictionary<ITypeSymbol, IRangedInstanceFunctionGroupNode> _rangedInstanceFunctionGroupNodes = new(MatchTypeParametersSymbolEqualityComparer.IncludeNullability);
 
+    // ReSharper disable once InconsistentNaming
     protected readonly List<IVoidFunctionNode> _initializationFunctions = new();
 
     protected readonly Dictionary<INamedTypeSymbol, IInitializedInstanceNode> InitializedInstanceNodesMap = new(CustomSymbolEqualityComparer.IncludeNullability);
@@ -82,13 +98,13 @@ internal abstract class RangeNode : IRangeNode
 
     public abstract string FullName { get; }
     public string Name { get; }
-    public abstract DisposalType DisposalType { get; }
     public IDisposalHandlingNode DisposalHandling { get; }
     public IMethodSymbol? AddForDisposal { get; }
     public IMethodSymbol? AddForDisposalAsync { get; }
     public abstract string? ContainerReference { get; }
 
     public IEnumerable<IInitializedInstanceNode> InitializedInstances => InitializedInstanceNodesMap.Values;
+    public string ResolutionCounterReference { get; }
 
     public IFunctionCallNode BuildEnumerableCall(INamedTypeSymbol type, IFunctionNode callingFunction,
         PassedContext passedContext) =>
@@ -208,10 +224,11 @@ internal abstract class RangeNode : IRangeNode
         IMapperDataToFunctionKeyTypeConverter mapperDataToFunctionKeyTypeConverter,
         ITypeParameterUtility typeParameterUtility,
         IRangeUtility rangeUtility,
+        ICheckTypeProperties checkTypeProperties,
         WellKnownTypes wellKnownTypes,
         WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous,
         IReferenceGenerator referenceGenerator,
-        Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateFunctionNodeRoot> createFunctionNodeFactory,
+        Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ImplementationMappingConfiguration?, ICreateFunctionNodeRoot> createFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiFunctionNodeRoot> multiFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueFunctionNodeRoot> multiKeyValueFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueMultiFunctionNodeRoot> multiKeyValueMultiFunctionNodeFactory,
@@ -222,6 +239,7 @@ internal abstract class RangeNode : IRangeNode
     {
         _mapperDataToFunctionKeyTypeConverter = mapperDataToFunctionKeyTypeConverter;
         TypeParameterUtility = typeParameterUtility;
+        _checkTypeProperties = checkTypeProperties;
         _referenceGenerator = referenceGenerator;
         _createFunctionNodeFactory = createFunctionNodeFactory;
         _multiFunctionNodeFactory = multiFunctionNodeFactory;
@@ -264,6 +282,12 @@ internal abstract class RangeNode : IRangeNode
             foreach (var type in types)
                 InitializedInstanceNodesMap[type] = initializedInstanceNodeFactory(type);
         }
+        
+        ResolutionCounterReference = referenceGenerator.Generate("resolutionCounter");
+        DisposeChunkMethodName = referenceGenerator.Generate("DisposeChunk");
+        DisposeChunkAsyncMethodName = referenceGenerator.Generate("DisposeChunkAsync");
+        DisposeExceptionHandlingMethodName = referenceGenerator.Generate("DisposeExceptionHandling");
+        DisposeExceptionHandlingAsyncMethodName = referenceGenerator.Generate("DisposeExceptionHandlingAsync");
     }
     
     protected abstract IScopeManager ScopeManager { get; }
@@ -278,7 +302,7 @@ internal abstract class RangeNode : IRangeNode
 
     public abstract void Accept(INodeVisitor nodeVisitor);
 
-    public IFunctionCallNode BuildCreateCall(ITypeSymbol type, IFunctionNode callingFunction) =>
+    public IFunctionCallNode BuildCreateCall(ITypeSymbol type, IFunctionNode callingFunction, ImplementationMappingConfiguration? implementationMappingConfiguration = null) =>
         FunctionResolutionUtility.GetOrCreateFunctionCall(
             type,
             callingFunction,
@@ -286,7 +310,8 @@ internal abstract class RangeNode : IRangeNode
             () => _createFunctionNodeFactory(
                     new VanillaMapperData(),
                     TypeParameterUtility.ReplaceTypeParametersByCustom(type),
-                    callingFunction.Overrides.Select(kvp => kvp.Key).ToList())
+                    callingFunction.Overrides.Select(kvp => kvp.Key).ToList(),
+                    implementationMappingConfiguration)
                 .Function
                 .EnqueueBuildJobTo(ParentContainer.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null)),
             f => f.CreateCall(type, null, callingFunction, TypeParameterUtility.ExtractTypeParameters(type)));
@@ -303,7 +328,8 @@ internal abstract class RangeNode : IRangeNode
             () => _createFunctionNodeFactory(
                     mapperData,
                     TypeParameterUtility.ReplaceTypeParametersByCustom(type),
-                    callingFunction.Overrides.Select(kvp => kvp.Key).ToList())
+                    callingFunction.Overrides.Select(kvp => kvp.Key).ToList(),
+                    null)
                 .Function
                 .EnqueueBuildJobTo(ParentContainer.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null)),
             f => f.CreateAsyncCall(type, null, synchronicity, callingFunction, TypeParameterUtility.ExtractTypeParameters(type)));
@@ -327,6 +353,33 @@ internal abstract class RangeNode : IRangeNode
         foreach (var initializationFunction in _initializationFunctions)
             initializationFunction.ReorderOrDetectCycle();
     }
+
+    public string DisposeChunkMethodName { get; }
+    public string DisposeChunkAsyncMethodName { get; }
+    public string DisposeExceptionHandlingMethodName { get; }
+    public string DisposeExceptionHandlingAsyncMethodName { get; }
+
+    public void RegisterTypeForDisposal(INamedTypeSymbol type) => 
+        _aggregatedTypesForDisposal.Add(type.UnboundIfGeneric());
+
+    public IReadOnlyDictionary<DisposalType, IReadOnlyList<INamedTypeSymbol>> GetDisposalTypeToTypeFullNames() =>
+        _aggregatedTypesForDisposal
+            .SelectMany<INamedTypeSymbol, (DisposalType, INamedTypeSymbol)>(t =>
+            {
+                var disposalType = _checkTypeProperties.ShouldDisposalBeManaged(t);
+                return disposalType switch
+                {
+                    DisposalType.Async | DisposalType.Sync => [(DisposalType.Async, t), (DisposalType.Sync, t)],
+                    DisposalType.Async => [(DisposalType.Async, t)],
+                    DisposalType.Sync => [(DisposalType.Sync, t)],
+                    _ => []
+                };
+            })
+            .GroupBy(t => t.Item1)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<INamedTypeSymbol>) g.Select(t => t.Item2).ToList());
+
+    public abstract INodeGenerator GetGenerator();
+    public abstract bool GenerateEmptyConstructor { get; }
 
     public ITransientScopeCallNode BuildTransientScopeCall(
         INamedTypeSymbol type, 

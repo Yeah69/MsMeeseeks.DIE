@@ -1,3 +1,4 @@
+using MsMeeseeks.DIE.CodeGeneration.Nodes;
 using MsMeeseeks.DIE.Nodes.Elements;
 using MsMeeseeks.DIE.Nodes.Elements.FunctionCalls;
 using MsMeeseeks.DIE.Nodes.Ranges;
@@ -23,11 +24,14 @@ internal abstract class ReturningFunctionNodeBase : FunctionNodeBase, IReturning
         IRangeNode parentRange,
         
         // dependencies
+        ISubDisposalNodeChooser subDisposalNodeChooser,
+        ITransientScopeDisposalNodeChooser transientScopeDisposalNodeChooser,
+        Lazy<IFunctionNodeGenerator> functionNodeGenerator,
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
-        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, IScopeCallNode> scopeCallNodeFactory,
-        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<PlainFunctionCallNode.Params, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<WrappedAsyncFunctionCallNode.Params, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ScopeCallNode.Params, IScopeCallNode> scopeCallNodeFactory,
+        Func<TransientScopeCallNode.Params, ITransientScopeCallNode> transientScopeCallNodeFactory,
         ITypeParameterUtility typeParameterUtility,
         WellKnownTypes wellKnownTypes)
         : base(
@@ -37,6 +41,9 @@ internal abstract class ReturningFunctionNodeBase : FunctionNodeBase, IReturning
             parentContainer,
             parentRange,
             
+            subDisposalNodeChooser,
+            transientScopeDisposalNodeChooser,
+            functionNodeGenerator,
             parameterNodeFactory,
             plainFunctionCallNodeFactory,
             asyncFunctionCallNodeFactory,
@@ -47,6 +54,20 @@ internal abstract class ReturningFunctionNodeBase : FunctionNodeBase, IReturning
         TypeSymbol = typeSymbol;
         ReturnedTypeFullName = TypeSymbol.FullName();
         TypeParameters = typeParameterUtility.ExtractTypeParameters(typeSymbol);
+
+        if (TypeSymbol is INamedTypeSymbol { IsGenericType: true } namedTypeSymbol)
+        {
+            if (CustomSymbolEqualityComparer.Default.Equals(wellKnownTypes.Task1, namedTypeSymbol.OriginalDefinition))
+            {
+                SynchronicityDecision = SynchronicityDecision.AsyncTask;
+                SynchronicityDecisionKind = SynchronicityDecisionKind.AsyncNatural;
+            }
+            else if (CustomSymbolEqualityComparer.Default.Equals(wellKnownTypes.ValueTask1, namedTypeSymbol.OriginalDefinition))
+            {
+                SynchronicityDecision = SynchronicityDecision.AsyncValueTask;
+                SynchronicityDecisionKind = SynchronicityDecisionKind.AsyncNatural;
+            }
+        }
     }
 
     protected override void AdjustToAsync()

@@ -1,3 +1,4 @@
+using MsMeeseeks.DIE.CodeGeneration.Nodes;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Extensions;
 using MsMeeseeks.DIE.Mappers;
@@ -21,11 +22,10 @@ internal interface IContainerNode : IRangeNode
     IEnumerable<IScopeNode> Scopes { get; }
     IEnumerable<ITransientScopeNode> TransientScopes { get; }
     ITransientScopeInterfaceNode TransientScopeInterface { get; }
+    string ScopeInterface { get; }
     string TransientScopeDisposalReference { get; }
-    string TransientScopeDisposalElement { get; }
     IFunctionCallNode BuildContainerInstanceCall(string? ownerReference, INamedTypeSymbol type, IFunctionNode callingFunction);
     IReadOnlyList<ICreateContainerFunctionNode> CreateContainerFunctions { get; }
-    bool GenerateEmptyConstructor { get; }
 
     void RegisterDelegateBaseNode(IDelegateBaseNode delegateBaseNode);
 }
@@ -42,11 +42,10 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
     private readonly Func<IMethodSymbol?, IVoidFunctionNode?, ICreateContainerFunctionNode> _creatContainerFunctionNodeFactory;
     private readonly List<IEntryFunctionNode> _rootFunctions = [];
     private readonly Lazy<IScopeManager> _lazyScopeManager;
-    private readonly Lazy<DisposalType> _lazyDisposalType;
+    private readonly Lazy<IContainerNodeGenerator> _containerNodeGenerator;
     private readonly List<IDelegateBaseNode> _delegateBaseNodes = [];
 
     public override string FullName { get; }
-    public override DisposalType DisposalType => _lazyDisposalType.Value;
     public string Namespace { get; }
     public Queue<BuildJob> BuildQueue { get; } = new();
     public Queue<IFunctionNode> AsyncCheckQueue { get; } = new();
@@ -54,8 +53,8 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
     public IEnumerable<IScopeNode> Scopes => ScopeManager.Scopes;
     public IEnumerable<ITransientScopeNode> TransientScopes => ScopeManager.TransientScopes;
     public ITransientScopeInterfaceNode TransientScopeInterface => _lazyTransientScopeInterfaceNode.Value;
+    public string ScopeInterface { get; }
     public string TransientScopeDisposalReference { get; }
-    public string TransientScopeDisposalElement { get; }
 
     public IFunctionCallNode BuildContainerInstanceCall(
         string? ownerReference, 
@@ -64,7 +63,7 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         BuildRangedInstanceCall(ownerReference, type, callingFunction, ScopeLevel.Container);
 
     public IReadOnlyList<ICreateContainerFunctionNode> CreateContainerFunctions { get; private set; } = null!;
-    public bool GenerateEmptyConstructor { get; }
+    public override bool GenerateEmptyConstructor { get; }
 
     public void RegisterDelegateBaseNode(IDelegateBaseNode delegateBaseNode) => 
         _delegateBaseNodes.Add(delegateBaseNode);
@@ -77,12 +76,14 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         IMapperDataToFunctionKeyTypeConverter mapperDataToFunctionKeyTypeConverter,
         ITypeParameterUtility typeParameterUtility,
         IRangeUtility rangeUtility,
+        ICheckTypeProperties checkTypeProperties,
         WellKnownTypes wellKnownTypes,
         WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous,
         ICurrentExecutionPhaseSetter currentExecutionPhaseSetter,
         Lazy<ITransientScopeInterfaceNode> lazyTransientScopeInterfaceNode,
         Lazy<IScopeManager> lazyScopeManager,
-        Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ICreateFunctionNodeRoot> createFunctionNodeFactory,
+        Lazy<IContainerNodeGenerator> containerNodeGenerator,
+        Func<MapperData, ITypeSymbol, IReadOnlyList<ITypeSymbol>, ImplementationMappingConfiguration?, ICreateFunctionNodeRoot> createFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiFunctionNodeRoot> multiFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueFunctionNodeRoot> multiKeyValueFunctionNodeFactory,
         Func<INamedTypeSymbol, IReadOnlyList<ITypeSymbol>, IMultiKeyValueMultiFunctionNodeRoot> multiKeyValueMultiFunctionNodeFactory,
@@ -99,6 +100,7 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
             mapperDataToFunctionKeyTypeConverter,
             typeParameterUtility,
             rangeUtility,
+            checkTypeProperties,
             wellKnownTypes,
             wellKnownTypesMiscellaneous,
             referenceGenerator,
@@ -121,21 +123,13 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         FullName = _containerInfo.FullName;
         
         _lazyScopeManager = lazyScopeManager;
-        _lazyDisposalType = new(() => _lazyScopeManager.Value
-            .Scopes.Select(s => s.DisposalHandling)
-            .Concat(_lazyScopeManager.Value.TransientScopes.Select(ts => ts.DisposalHandling))
-            .Prepend(DisposalHandling)
-            .Aggregate(DisposalType.None, (agg, next) =>
-            {
-                if (next.HasSyncDisposables) agg |= DisposalType.Sync;
-                if (next.HasAsyncDisposables) agg |= DisposalType.Async;
-                return agg;
-            }));
-        
+        _containerNodeGenerator = containerNodeGenerator;
+
         TransientScopeDisposalReference = referenceGenerator.Generate("transientScopeDisposal");
-        TransientScopeDisposalElement = referenceGenerator.Generate("transientScopeToDispose");
         
         GenerateEmptyConstructor = !_containerInfo.ContainerType.InstanceConstructors.Any(ic => !ic.IsImplicitlyDeclared);
+        
+        ScopeInterface = referenceGenerator.Generate("IScope");
     }
 
     protected override IScopeManager ScopeManager => _lazyScopeManager.Value;
@@ -214,6 +208,8 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
     }
 
     public override string? ContainerReference => null;
+
+    public override INodeGenerator GetGenerator() => _containerNodeGenerator.Value;
 
     public override IFunctionCallNode BuildContainerInstanceCall(INamedTypeSymbol type, IFunctionNode callingFunction) => 
         BuildContainerInstanceCall(null, type, callingFunction);

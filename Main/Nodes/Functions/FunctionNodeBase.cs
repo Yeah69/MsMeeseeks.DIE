@@ -1,3 +1,4 @@
+using MsMeeseeks.DIE.CodeGeneration.Nodes;
 using MsMeeseeks.DIE.Extensions;
 using MsMeeseeks.DIE.Mappers;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -11,10 +12,11 @@ namespace MsMeeseeks.DIE.Nodes.Functions;
 internal abstract class FunctionNodeBase : IFunctionNode
 {
     private readonly IContainerNode _parentContainer;
-    private readonly Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode> _plainFunctionCallNodeFactory;
-    private readonly Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> _asyncFunctionCallNodeFactory;
-    private readonly Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, IScopeCallNode> _scopeCallNodeFactory;
-    private readonly Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, ITransientScopeCallNode> _transientScopeCallNodeFactory;
+    private readonly Lazy<IFunctionNodeGenerator> _functionNodeGenerator;
+    private readonly Func<PlainFunctionCallNode.Params, IPlainFunctionCallNode> _plainFunctionCallNodeFactory;
+    private readonly Func<WrappedAsyncFunctionCallNode.Params, IWrappedAsyncFunctionCallNode> _asyncFunctionCallNodeFactory;
+    private readonly Func<ScopeCallNode.Params, IScopeCallNode> _scopeCallNodeFactory;
+    private readonly Func<TransientScopeCallNode.Params, ITransientScopeCallNode> _transientScopeCallNodeFactory;
     protected readonly WellKnownTypes WellKnownTypes;
     private readonly List<IAwaitableNode> _awaitableNodes = [];
     private readonly List<ILocalFunctionNode> _localFunctions = [];
@@ -31,18 +33,22 @@ internal abstract class FunctionNodeBase : IFunctionNode
         Accessibility? accessibility,
         IReadOnlyList<ITypeSymbol> parameters,
         ImmutableDictionary<ITypeSymbol, IParameterNode> closureParameters,
-        IContainerNode parentContainer,
-        IRangeNode parentRange,
         
         // dependencies
+        IContainerNode parentContainer,
+        IRangeNode parentRange,
+        ISubDisposalNodeChooser subDisposalNodeChooser,
+        ITransientScopeDisposalNodeChooser transientScopeDisposalNodeChooser,
+        Lazy<IFunctionNodeGenerator> functionNodeGenerator,
         Func<ITypeSymbol, IParameterNode> parameterNodeFactory,
-        Func<ITypeSymbol, string?, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
-        Func<ITypeSymbol, string?, SynchronicityDecision, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
-        Func<ITypeSymbol, (string, string), IScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, IScopeCallNode> scopeCallNodeFactory,
-        Func<ITypeSymbol, string, ITransientScopeNode, IRangeNode, IReadOnlyList<(IParameterNode, IParameterNode)>, IReadOnlyList<ITypeSymbol>, IFunctionCallNode?, ScopeCallNodeOuterMapperParam, ITransientScopeCallNode> transientScopeCallNodeFactory,
+        Func<PlainFunctionCallNode.Params, IPlainFunctionCallNode> plainFunctionCallNodeFactory,
+        Func<WrappedAsyncFunctionCallNode.Params, IWrappedAsyncFunctionCallNode> asyncFunctionCallNodeFactory,
+        Func<ScopeCallNode.Params, IScopeCallNode> scopeCallNodeFactory,
+        Func<TransientScopeCallNode.Params, ITransientScopeCallNode> transientScopeCallNodeFactory,
         WellKnownTypes wellKnownTypes)
     {
         _parentContainer = parentContainer;
+        _functionNodeGenerator = functionNodeGenerator;
         _plainFunctionCallNodeFactory = plainFunctionCallNodeFactory;
         _asyncFunctionCallNodeFactory = asyncFunctionCallNodeFactory;
         _scopeCallNodeFactory = scopeCallNodeFactory;
@@ -81,7 +87,8 @@ internal abstract class FunctionNodeBase : IFunctionNode
         Overrides = currentOverrides;
 
         RangeFullName = parentRange.FullName;
-        DisposedPropertyReference = parentRange.DisposalHandling.DisposedPropertyReference;
+        SubDisposalNode = subDisposalNodeChooser.ChooseSubDisposalNode();
+        TransientScopeDisposalNode = transientScopeDisposalNodeChooser.ChooseTransientScopeDisposalNode();
     }
 
     public virtual void Build(PassedContext passedContext) =>
@@ -114,6 +121,24 @@ internal abstract class FunctionNodeBase : IFunctionNode
     public void RegisterUsedInitializedInstance(IInitializedInstanceNode initializedInstance) => 
         _usedInitializedInstances.Add(initializedInstance);
 
+    private int _subDisposalCount;
+    public void AddOneToSubDisposalCount() => _subDisposalCount++;
+
+    public int GetSubDisposalCount() =>
+        _subDisposalCount +
+        CalledFunctions
+            .Where(f => f.IsSubDisposalAsParameter)
+            .Sum(f => f.GetSubDisposalCount());
+
+    private int _transientScopeDisposalCount;
+    public void AddOneToTransientScopeDisposalCount() => _transientScopeDisposalCount++;
+
+    public int GetTransientScopeDisposalCount() =>
+        _transientScopeDisposalCount +
+        CalledFunctions
+            .Where(f => f.IsTransientScopeDisposalAsParameter)
+            .Sum(f => f.GetTransientScopeDisposalCount());
+
     protected virtual void OnBecameAsync() {}
 
     public void CheckSynchronicity()
@@ -130,8 +155,8 @@ internal abstract class FunctionNodeBase : IFunctionNode
     {
         if (SuppressAsync) return;
         _synchronicityCheckedAlready = true;
-        if (SynchronicityDecision is SynchronicityDecision.AsyncValueTask or SynchronicityDecision.AsyncTask) 
-            return; // Already async
+        if (SynchronicityDecisionKind != SynchronicityDecisionKind.Sync) return; // Already async
+        SynchronicityDecisionKind = SynchronicityDecisionKind.AsyncForced;
         AdjustToAsync();
         OnBecameAsync();
         foreach (var callingFunction in _callingFunctions)
@@ -140,7 +165,10 @@ internal abstract class FunctionNodeBase : IFunctionNode
 
     protected virtual bool SuppressAsync => false;
     public string RangeFullName { get; }
-    public string DisposedPropertyReference { get; }
+    public IElementNode SubDisposalNode { get; }
+    public IElementNode TransientScopeDisposalNode { get; }
+    public bool IsSubDisposalAsParameter => SubDisposalNode is IParameterNode;
+    public bool IsTransientScopeDisposalAsParameter => TransientScopeDisposalNode is IParameterNode;
 
     public IFunctionCallNode CreateCall(
         ITypeSymbol callSideType,
@@ -149,10 +177,13 @@ internal abstract class FunctionNodeBase : IFunctionNode
         IReadOnlyList<ITypeSymbol> typeParameters)
     {
         var call = _plainFunctionCallNodeFactory(
-                callSideType,
-                ownerReference,
-                Parameters.Select(t => (t.Node, callingFunction.Overrides[t.Type])).ToList(),
-                typeParameters)
+                new PlainFunctionCallNode.Params(
+                    callSideType,
+                    ownerReference,
+                    Parameters.Select(t => (t.Node, callingFunction.Overrides[t.Type])).ToList(),
+                    typeParameters,
+                    callingFunction.SubDisposalNode,
+                    callingFunction.TransientScopeDisposalNode))
             .EnqueueBuildJobTo(_parentContainer.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null));
         
         callingFunction.RegisterCalledFunction(this);
@@ -170,11 +201,14 @@ internal abstract class FunctionNodeBase : IFunctionNode
         IReadOnlyList<ITypeSymbol> typeParameters)
     {
         var call = _asyncFunctionCallNodeFactory(
-                wrappedType,
-                ownerReference,
-                synchronicity,
-                Parameters.Select(t => (t.Node, callingFunction.Overrides[t.Type])).ToList(),
-                typeParameters)
+                new WrappedAsyncFunctionCallNode.Params(
+                    wrappedType,
+                    ownerReference,
+                    synchronicity,
+                    Parameters.Select(t => (t.Node, callingFunction.Overrides[t.Type])).ToList(),
+                    typeParameters,
+                    callingFunction.SubDisposalNode,
+                    callingFunction.TransientScopeDisposalNode))
             .EnqueueBuildJobTo(_parentContainer.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null));
         
         callingFunction.RegisterCalledFunction(this);
@@ -195,14 +229,16 @@ internal abstract class FunctionNodeBase : IFunctionNode
         IElementNodeMapperBase scopeImplementationMapper)
     {
         var call = _scopeCallNodeFactory(
-                callSideType,
-                (containerParameter, transientScopeInterfaceParameter),
-                scope,
-                callingRange,
-                Parameters.Select(t => (t.Node, callingFunction.Overrides[t.Type])).ToList(),
-                typeParameters,
-                scope.InitializedInstances.Any() ? scope.BuildInitializationCall(callingFunction) : null,
-                new ScopeCallNodeOuterMapperParam(scopeImplementationMapper))
+                new ScopeCallNode.Params(
+                    callSideType,
+                    containerParameter,
+                    transientScopeInterfaceParameter,
+                    scope,
+                    callingFunction,
+                    Parameters.Select(t => (t.Node, callingFunction.Overrides[t.Type])).ToList(),
+                    typeParameters,
+                    scope.InitializedInstances.Any() ? scope.BuildInitializationCall(callingFunction) : null,
+                    new ScopeCallNodeOuterMapperParam(scopeImplementationMapper)))
             .EnqueueBuildJobTo(_parentContainer.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null));
         
         callingFunction.RegisterCalledFunction(this);
@@ -222,14 +258,17 @@ internal abstract class FunctionNodeBase : IFunctionNode
         IElementNodeMapperBase transientScopeImplementationMapper)
     {
         var call = _transientScopeCallNodeFactory(
+            new TransientScopeCallNode.Params(
                 callSideType,
                 containerParameter,
                 transientScopeNode,
                 callingRange,
+                callingFunction,
+                callingFunction.TransientScopeDisposalNode,
                 Parameters.Select(t => (t.Node, callingFunction.Overrides[t.Type])).ToList(),
                 typeParameters,
                 transientScopeNode.InitializedInstances.Any() ? transientScopeNode.BuildInitializationCall(callingFunction) : null,
-                new ScopeCallNodeOuterMapperParam(transientScopeImplementationMapper))
+                new ScopeCallNodeOuterMapperParam(transientScopeImplementationMapper)))
             .EnqueueBuildJobTo(_parentContainer.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null));
         
         callingFunction.RegisterCalledFunction(this);
@@ -252,6 +291,8 @@ internal abstract class FunctionNodeBase : IFunctionNode
     public void AddReusedNode(ITypeSymbol type, IReusedNode reusedNode) => 
         _reusedNodes[type] = reusedNode;
 
+    public INodeGenerator GetGenerator() => _functionNodeGenerator.Value;
+
     public void AddLocalFunction(ILocalFunctionNode function) =>
         _localFunctions.Add(function);
 
@@ -260,6 +301,7 @@ internal abstract class FunctionNodeBase : IFunctionNode
 
     public Accessibility? Accessibility { get; }
     public SynchronicityDecision SynchronicityDecision { get; protected set; } = SynchronicityDecision.Sync;
+    public SynchronicityDecisionKind SynchronicityDecisionKind { get; protected set; } = SynchronicityDecisionKind.Sync;
     public abstract string Name { get; protected set; }
     public string ReturnedTypeFullName { get; protected set; } = "";
     public abstract string ReturnedTypeNameNotWrapped { get; }
