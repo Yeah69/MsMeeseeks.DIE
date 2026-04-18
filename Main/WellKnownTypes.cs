@@ -14,6 +14,8 @@ internal sealed record WellKnownTypes(
     INamedTypeSymbol? ValueTask1, // .NET Standard 2.1
     INamedTypeSymbol Task, // .NET Standard 2.0
     INamedTypeSymbol Task1, // .NET Standard 2.0
+    INamedTypeSymbol TaskCompletionSource1, // .NET Standard 2.0
+    INamedTypeSymbol TaskCompletionSourceOfInt, // .NET Standard 2.0
     INamedTypeSymbol SpinWait, // .NET Standard 2.0
     INamedTypeSymbol Thread, // .NET Standard 2.0
     INamedTypeSymbol ObjectDisposedException, // .NET Standard 2.0
@@ -23,6 +25,8 @@ internal sealed record WellKnownTypes(
     INamedTypeSymbol? ConcurrentDictionaryOfAsyncDisposable,  // .NET Standard 2.1
     INamedTypeSymbol ListOfObject, // .NET Standard 2.0
     INamedTypeSymbol ListOfListOfObject, // .NET Standard 2.0
+    INamedTypeSymbol ConcurrentStackOfObject, // .NET Standard 2.0
+    INamedTypeSymbol ConcurrentStackOfConcurrentStackOfObject, // .NET Standard 2.0
     INamedTypeSymbol ConcurrentDictionaryOfRuntimeTypeHandleToObject, // .NET Standard 2.0
     INamedTypeSymbol Exception, // .NET Standard 2.0
     // ReSharper disable InconsistentNaming
@@ -38,6 +42,7 @@ internal sealed record WellKnownTypes(
     INamedTypeSymbol Nullable1, // .NET Standard 2.0
     INamedTypeSymbol Interlocked, // .NET Standard 2.0
     INamedTypeSymbol Type, // .NET Standard 2.0
+    INamedTypeSymbol String, // .NET Standard 2.0
     INamedTypeSymbol Object) // .NET Standard 2.0
     : IContainerInstance
 {
@@ -50,11 +55,13 @@ internal sealed record WellKnownTypes(
         var runtimeTypeHandle = compilation.GetTypeByMetadataNameOrThrow("System.RuntimeTypeHandle");
         var @object = compilation.GetTypeByMetadataNameOrThrow("System.Object");
         var list = compilation.GetTypeByMetadataNameOrThrow("System.Collections.Generic.List`1");
+        var concurrentStack = compilation.GetTypeByMetadataNameOrThrow("System.Collections.Concurrent.ConcurrentStack`1");
         var valueTask1 = compilation.GetTypeByMetadataName("System.Threading.Tasks.ValueTask`1");
         var enumerable1 = compilation.GetTypeByMetadataNameOrThrow("System.Collections.Generic.IEnumerable`1");
         var exception = compilation.GetTypeByMetadataNameOrThrow("System.Exception");
         var task1 = compilation.GetTypeByMetadataNameOrThrow("System.Threading.Tasks.Task`1");
         var aggregateException = compilation.GetTypeByMetadataNameOrThrow("System.AggregateException");
+        var taskCompletionSource1 = compilation.GetTypeByMetadataNameOrThrow("System.Threading.Tasks.TaskCompletionSource`1");
         
         return new WellKnownTypes(
             IDisposable: iDisposable,
@@ -65,6 +72,8 @@ internal sealed record WellKnownTypes(
             ValueTask1: valueTask1,
             Task: compilation.GetTypeByMetadataNameOrThrow("System.Threading.Tasks.Task"),
             Task1: task1,
+            TaskCompletionSource1: taskCompletionSource1,
+            TaskCompletionSourceOfInt: taskCompletionSource1.Construct(compilation.GetSpecialType(SpecialType.System_Int32)),
             SpinWait: compilation.GetTypeByMetadataNameOrThrow("System.Threading.SpinWait"),
             Thread: compilation.GetTypeByMetadataNameOrThrow("System.Threading.Thread"),
             ObjectDisposedException: compilation.GetTypeByMetadataNameOrThrow("System.ObjectDisposedException"),
@@ -75,6 +84,8 @@ internal sealed record WellKnownTypes(
             ConcurrentDictionaryOfRuntimeTypeHandleToObject: concurrentDictionary2.Construct(runtimeTypeHandle, @object),
             ListOfObject: list.Construct(@object),
             ListOfListOfObject: list.Construct(list.Construct(@object)),
+            ConcurrentStackOfObject: concurrentStack.Construct(@object),
+            ConcurrentStackOfConcurrentStackOfObject: concurrentStack.Construct(concurrentStack.Construct(@object)),
             Exception: exception,
             IEnumerableOfException: enumerable1.Construct(exception),
             IAsyncEnumerableOfException: compilation.GetTypeByMetadataName("System.Collections.Generic.IAsyncEnumerable`1")?.Construct(exception),
@@ -87,6 +98,7 @@ internal sealed record WellKnownTypes(
             Nullable1: compilation.GetTypeByMetadataNameOrThrow("System.Nullable`1"),
             Interlocked: compilation.GetTypeByMetadataNameOrThrow("System.Threading.Interlocked"),
             Type: compilation.GetTypeByMetadataNameOrThrow("System.Type"),
+            String: compilation.GetTypeByMetadataNameOrThrow("System.String"),
             Object: @object);
     }
 }

@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using System.Threading;
+using System.Threading.Tasks;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Nodes.Functions;
 using MsMeeseeks.DIE.Nodes.Ranges;
@@ -48,10 +50,14 @@ internal abstract class RangeNodeGenerator : IRangeNodeGenerator
     public void Generate(StringBuilder code, ICodeGenerationVisitor visitor)
     {
         PreClass(code);
+        
+        var genericParameters = _rangeNode is IContainerNode containerNode && containerNode.TypeParameters.Any()
+            ? $"<{string.Join(", ", containerNode.TypeParameters.Select(p => p.Name))}>"
+            : "";
 
         code.AppendLine(
             $$"""
-              {{ClassDeclaredAccessibility}}sealed partial class {{_rangeNode.Name}} : {{_disposeUtility.DisposableRangeInterfaceData.InterfaceNameFullyQualified}}, {{InterfaceAssignment}}
+              {{ClassDeclaredAccessibility}}sealed partial class {{_rangeNode.Name}}{{genericParameters}} : {{_disposeUtility.DisposableRangeInterfaceData.InterfaceNameFullyQualified}}, {{InterfaceAssignment}}
               {
               """);
         
@@ -59,11 +65,17 @@ internal abstract class RangeNodeGenerator : IRangeNodeGenerator
             code.AppendLine($"{DefaultConstructorDeclaredAccessibility}{_rangeNode.Name}() {{ }}");
         
         PreGeneralContent(code, visitor);
+
+        if (_wellKnownTypes.ValueTask is not null && _wellKnownTypes.IAsyncDisposable is not null)
+        {
+            code.AppendLine(
+                $"private readonly {_wellKnownTypes.TaskCompletionSourceOfInt.FullName()} {_rangeNode.ReleaseDisposeAsyncReference} = new {_wellKnownTypes.TaskCompletionSourceOfInt.FullName()}();");
+        }
         
         code.AppendLine(
             $$"""
-              private {{_wellKnownTypes.Int32.FullName()}} {{_rangeNode.ResolutionCounterReference}};
-              private {{_wellKnownTypes.ListOfListOfObject.FullName()}} {{_rangeNode.DisposalHandling.CollectionReference}} = new {{_wellKnownTypes.ListOfListOfObject.FullName()}}();
+              private {{_wellKnownTypes.Int32.FullName()}} {{_rangeNode.ResolutionCounterReference}} = 0;
+              private {{_wellKnownTypes.ConcurrentStackOfConcurrentStackOfObject.FullName()}} {{_rangeNode.DisposalHandling.CollectionReference}} = new {{_wellKnownTypes.ConcurrentStackOfConcurrentStackOfObject.FullName()}}();
               """);
         foreach (var initializedInstance in _rangeNode.InitializedInstances)
             visitor.VisitIInitializedInstanceNode(initializedInstance);
@@ -147,6 +159,15 @@ internal abstract class RangeNodeGenerator : IRangeNodeGenerator
                   finally
                   {
                   {{_wellKnownTypes.Interlocked.FullName()}}.{{nameof(Interlocked.Decrement)}}(ref {{_rangeNode.ResolutionCounterReference}});
+
+                  """);
+            if (_wellKnownTypes.ValueTask is not null && _wellKnownTypes.IAsyncDisposable is not null && _disposeUtility.ReleaseDisposeAsyncFullyQualified is {} releaseDisposeAsyncFullyQualified)
+            {
+                code.AppendLine(
+                    $"{releaseDisposeAsyncFullyQualified}(ref {_rangeNode.DisposalHandling.DisposedFieldReference}, ref {_rangeNode.ResolutionCounterReference}, {_rangeNode.ReleaseDisposeAsyncReference});");
+            }
+            code.AppendLine(
+                $$"""
                   }
                   }
                   """);
@@ -161,6 +182,8 @@ internal abstract class RangeNodeGenerator : IRangeNodeGenerator
         var asyncDisposal = disposalMap.TryGetValue(DisposalType.Async, out var listAsync0) ? listAsync0 : [];
         var syncDisposal = disposalMap.TryGetValue(DisposalType.Sync, out var listSync0) ? listSync0 : [];
 
+        var asyncDisposablesPossible = _containerNode.AsyncDisposablesPossible;
+
         var isAsyncClauseFunction = 
             _wellKnownTypes.IAsyncDisposable is not null 
             && _disposeUtility.DisposeSingularAsyncSyncedFullyQualified is not null
@@ -170,7 +193,23 @@ internal abstract class RangeNodeGenerator : IRangeNodeGenerator
         {
             case IContainerNode container:
                 code.AppendLine(
-                    $"{_wellKnownTypes.Object.FullName()}[] {_disposeUtility.DisposableRangeInterfaceData.InterfaceNameFullyQualified}.{_disposeUtility.DisposableRangeInterfaceData.TransientScopesPropertyName} => {_wellKnownTypesCollections.Enumerable}.{nameof(Enumerable.ToArray)}({container.TransientScopeDisposalReference});");
+                    $$"""
+                      {{_wellKnownTypes.Object.FullName()}}[] {{_disposeUtility.DisposableRangeInterfaceData.InterfaceNameFullyQualified}}.{{_disposeUtility.DisposableRangeInterfaceData.TransientScopesPropertyName}}
+                      {
+                      get
+                      {
+                      {{container.TransientScopeDisposalSemaphoreReference}}.{{nameof(SemaphoreSlim.Wait)}}();
+                      try
+                      {
+                      return {{_wellKnownTypesCollections.Enumerable}}.{{nameof(Enumerable.ToArray)}}({{container.TransientScopeDisposalReference}});
+                      }
+                      finally
+                      {
+                      {{container.TransientScopeDisposalSemaphoreReference}}.{{nameof(SemaphoreSlim.Release)}}();
+                      }
+                      }
+                      }
+                      """);
                 break;
             default:
                 code.AppendLine(
@@ -180,7 +219,7 @@ internal abstract class RangeNodeGenerator : IRangeNodeGenerator
             
         code.AppendLine(
             $$"""
-              {{_wellKnownTypes.ListOfListOfObject.FullName()}} {{_disposeUtility.DisposableRangeInterfaceData.InterfaceNameFullyQualified}}.{{_disposeUtility.DisposableRangeInterfaceData.DisposablesPropertyName}} => {{_rangeNode.DisposalHandling.CollectionReference}};
+              {{_wellKnownTypes.ConcurrentStackOfConcurrentStackOfObject.FullName()}} {{_disposeUtility.DisposableRangeInterfaceData.InterfaceNameFullyQualified}}.{{_disposeUtility.DisposableRangeInterfaceData.DisposablesPropertyName}} => {{_rangeNode.DisposalHandling.CollectionReference}};
               {{_wellKnownTypes.ConcurrentBagOfSyncDisposable.FullName()}} {{_disposeUtility.DisposableRangeInterfaceData.InterfaceNameFullyQualified}}.{{_disposeUtility.DisposableRangeInterfaceData.UserDefinedSyncDisposablesPropertyName}} => {{_rangeNode.DisposalHandling.SyncCollectionReference}};
               """);
 
@@ -190,10 +229,10 @@ internal abstract class RangeNodeGenerator : IRangeNodeGenerator
                   {{_wellKnownTypes.ConcurrentBagOfAsyncDisposable?.FullName()}} {{_disposeUtility.DisposableRangeInterfaceData.InterfaceNameFullyQualified}}.{{_disposeUtility.DisposableRangeInterfaceData.UserDefinedAsyncDisposablesPropertyName}} => {{_rangeNode.DisposalHandling.AsyncCollectionReference}};
                   """);
         
-        GenerateClauseFunction(_disposeUtility.DisposableRangeInterfaceData.SyncClauseFunctionName, syncDisposal, !isAsyncClauseFunction);
+        GenerateClauseFunction(_disposeUtility.DisposableRangeInterfaceData.SyncClauseFunctionName, syncDisposal, !asyncDisposablesPossible);
         
         if (isAsyncClauseFunction && _disposeUtility.DisposableRangeInterfaceData.AsyncClauseFunctionName is not null)
-            GenerateClauseFunction(_disposeUtility.DisposableRangeInterfaceData.AsyncClauseFunctionName, asyncDisposal, true);
+            GenerateClauseFunction(_disposeUtility.DisposableRangeInterfaceData.AsyncClauseFunctionName, asyncDisposal, asyncDisposablesPossible);
 
 
         if (_wellKnownTypes.ConcurrentBagOfAsyncDisposable is not null)
@@ -225,9 +264,12 @@ internal abstract class RangeNodeGenerator : IRangeNodeGenerator
                 ? $"async {_wellKnownTypes.ValueTask.FullName()} {Constants.IAsyncDisposableDisposeAsync}"
                 : $"void {nameof(IDisposable.Dispose)}";
             var awaitPrefix = isAsync ? "await " : "";
-            var utilityCallName = isAsync
-                ? _disposeUtility.DisposeAsyncFullyQualified
-                : _disposeUtility.DisposeFullyQualified;
+            var utilityCallName = (isAsync, asyncDisposablesPossible) switch
+            {
+                (true, _) => _disposeUtility.DisposeAsyncFullyQualified,
+                (_, false) when _disposeUtility.DisposeSyncOnlyFullyQualified is {} syncOnlyName => syncOnlyName,
+                _ => _disposeUtility.DisposeFullyQualified
+            };
             
             code.AppendLine(
                 $$"""
@@ -235,16 +277,33 @@ internal abstract class RangeNodeGenerator : IRangeNodeGenerator
                   {
                       var {{disposalHandling.DisposedLocalReference}} = {{_wellKnownTypes.Interlocked.FullName()}}.{{nameof(Interlocked.Exchange)}}(ref {{disposalHandling.DisposedFieldReference}}, 1);
                       if ({{disposalHandling.DisposedLocalReference}} != 0) return;
-                      {{_wellKnownTypes.SpinWait}}.{{nameof(SpinWait.SpinUntil)}}(() => {{_rangeNode.ResolutionCounterReference}} == 0);
                   """);
+            if (_disposeUtility.ReleaseDisposeAsyncFullyQualified is {} releaseDisposeAsyncFullyQualified)
+            {
+                code.AppendLine(
+                    $"{releaseDisposeAsyncFullyQualified}(ref {_rangeNode.DisposalHandling.DisposedFieldReference}, ref {_rangeNode.ResolutionCounterReference}, {_rangeNode.ReleaseDisposeAsyncReference});");
+            }
+
+            code.AppendLine(isAsync && _disposeUtility.ReleaseDisposeAsyncFullyQualified is not null
+                ? $"await {_rangeNode.ReleaseDisposeAsyncReference}.{nameof(TaskCompletionSource<int>.Task)};"
+                : $"{_wellKnownTypes.SpinWait}.{nameof(SpinWait.SpinUntil)}(() => {_rangeNode.ResolutionCounterReference} == 0);");
 
             switch (_rangeNode)
             {
                 case ITransientScopeNode transientScope:
+                    var waitMethod = isAsync ? nameof(SemaphoreSlim.WaitAsync) : nameof(SemaphoreSlim.Wait);
                     code.AppendLine(
                         $$"""
-                          {{transientScope.ContainerReference}}.{{transientScope.TransientScopeDisposalReference}}.{{nameof(List<object>.Remove)}}(this);
-                          {{transientScope.ContainerReference}}.{{transientScope.TransientScopeDisposalReference}}.{{nameof(List<object>.TrimExcess)}}();
+                          {{awaitPrefix}}{{transientScope.ContainerReference}}.{{_containerNode.TransientScopeDisposalSemaphoreReference}}.{{waitMethod}}();
+                          try 
+                          {
+                          {{transientScope.ContainerReference}}.{{_containerNode.TransientScopeDisposalReference}}.{{nameof(List<object>.Remove)}}(this);
+                          {{transientScope.ContainerReference}}.{{_containerNode.TransientScopeDisposalReference}}.{{nameof(List<object>.TrimExcess)}}();
+                          }
+                          finally
+                          {
+                          {{transientScope.ContainerReference}}.{{_containerNode.TransientScopeDisposalSemaphoreReference}}.{{nameof(SemaphoreSlim.Release)}}();
+                          }
                           """);
                     break;
             }

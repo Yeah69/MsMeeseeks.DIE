@@ -10,7 +10,16 @@ using MsMeeseeks.DIE.Nodes.Roots;
 
 namespace MsMeeseeks.DIE.MsContainer;
 
-internal sealed partial class MsContainer
+internal interface IContainerLevelOnlyContainerInstance;
+
+[ContainerInstanceImplementationAggregation(typeof(GeneratorExecutionContext))]
+[ContainerInstanceAbstractionAggregation(typeof(IContainerLevelOnlyContainerInstance))]
+[ImplementationChoice(typeof(IRangeNode), typeof(ContainerNode))]
+[ImplementationChoice(typeof(ICheckTypeProperties), typeof(ContainerCheckTypeProperties))]
+[ImplementationChoice(typeof(ICodeGenerationVisitor), typeof(CodeGenerationVisitor))]
+[DecoratorSequenceChoice(typeof(ILogEnhancer), typeof(ILogEnhancer), typeof(ContainerLevelLogEnhancerDecorator), typeof(ExecuteLevelLogEnhancerDecorator))]
+[CreateFunction(typeof(IExecuteContainer), "Create")]
+internal sealed partial class ContainerLevelContainer
 {
     private readonly GeneratorExecutionContext DIE_Factory_GeneratorExecutionContext;
     private readonly Compilation DIE_Factory_Compilation;
@@ -19,7 +28,7 @@ internal sealed partial class MsContainer
     private readonly DisposeUtility DIE_Factory_DisposeUtility;
     private readonly ReferenceGeneratorCounter DIE_Factory_referenceGeneratorCounter;
 
-    private MsContainer(
+    private ContainerLevelContainer(
         GeneratorExecutionContext context, 
         ContainerInfo dieFactoryContainerInfo,
         RequiredKeywordUtility dieFactoryRequiredKeywordUtility,
@@ -34,9 +43,11 @@ internal sealed partial class MsContainer
         DIE_Factory_GeneratorExecutionContext = context;
     }
 
+    [UserDefinedConstructorParametersInjection(typeof(UserDefinedElements))]
     private void DIE_ConstrParams_UserDefinedElements(out (INamedTypeSymbol? Range, INamedTypeSymbol Container) types) => 
         types = (DIE_Factory_ContainerInfo.ContainerType, DIE_Factory_ContainerInfo.ContainerType);
 
+    [UserDefinedConstructorParametersInjection(typeof(ScopeInfo))]
     private static void DIE_ConstrParams_ScopeInfo(
         out string name,
         out INamedTypeSymbol? scopeType)
@@ -60,10 +71,14 @@ internal sealed partial class MsContainer
     private WellKnownTypesMiscellaneous DIE_Factory_WellKnownTypesMiscellaneous() => 
         WellKnownTypesMiscellaneous.Create(DIE_Factory_Compilation);
 
+    [InitializedInstances(typeof(ReferenceGenerator))]
     private abstract class ScopeObject;
     
+    [ImplementationChoice(typeof(ICheckTypeProperties), typeof(ScopeCheckTypeProperties))]
+    [InitializedInstances(typeof(ScopeInfo))]
     private abstract class TransientScopeBase : ScopeObject
     {
+        [UserDefinedConstructorParametersInjection(typeof(UserDefinedElements))]
         protected static void DIE_ConstrParams_UserDefinedElements(
             IContainerInfo containerInfo,
             IScopeInfo scopeInfo,
@@ -71,10 +86,15 @@ internal sealed partial class MsContainer
             types = (scopeInfo.ScopeType, containerInfo.ContainerType);
     }
 
+    [ImplementationChoice(typeof(IRangeNode), typeof(ScopeNode))]
+    [CustomScopeForRootTypes(typeof(ScopeNodeRoot))]
     private sealed partial class DIE_TransientScope_ScopeNodeRoot : TransientScopeBase;
-    
+
+    [ImplementationChoice(typeof(IRangeNode), typeof(TransientScopeNode))]
+    [CustomScopeForRootTypes(typeof(TransientScopeNodeRoot))]
     private sealed partial class DIE_TransientScope_TransientScopeNodeRoot : TransientScopeBase;
 
+    [DecoratorSequenceChoice(typeof(ILogEnhancer), typeof(ILogEnhancer), typeof(FunctionLevelLogEnhancerDecorator), typeof(ContainerLevelLogEnhancerDecorator), typeof(ExecuteLevelLogEnhancerDecorator))]
     private abstract class ScopeBase : ScopeObject
     {
         protected readonly IRangeNode DIE_Factory_parentRange;
@@ -89,66 +109,99 @@ internal sealed partial class MsContainer
         }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(CreateFunctionNode))]
+    [CustomScopeForRootTypes(typeof(CreateFunctionNodeRoot))]
+    [InitializedInstances(typeof(CreateFunctionNode))]
     private sealed partial class DIE_Scope_CreateFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_CreateFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 
             : base(parentRange, checkTypeProperties) { }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(CreateScopeFunctionNode))]
+    [CustomScopeForRootTypes(typeof(CreateScopeFunctionNodeRoot))]
+    [InitializedInstances(typeof(CreateScopeFunctionNode))]
     private sealed partial class DIE_Scope_CreateScopeFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_CreateScopeFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 
             : base(parentRange, checkTypeProperties) { }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(CreateTransientScopeFunctionNode))]
+    [CustomScopeForRootTypes(typeof(CreateTransientScopeFunctionNodeRoot))]
+    [InitializedInstances(typeof(CreateTransientScopeFunctionNode))]
     private sealed partial class DIE_Scope_CreateTransientScopeFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_CreateTransientScopeFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 
             : base(parentRange, checkTypeProperties) { }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(EntryFunctionNode))]
+    [CustomScopeForRootTypes(typeof(EntryFunctionNodeRoot))]
+    [InitializedInstances(typeof(EntryFunctionNode))]
     private sealed partial class DIE_Scope_EntryFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_EntryFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 
             : base(parentRange, checkTypeProperties) { }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(LocalFunctionNode))]
+    [CustomScopeForRootTypes(typeof(LocalFunctionNodeRoot))]
+    [InitializedInstances(typeof(LocalFunctionNode))]
     private sealed partial class DIE_Scope_LocalFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_LocalFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 
             : base(parentRange, checkTypeProperties) { }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(RangedInstanceFunctionNode))]
+    [CustomScopeForRootTypes(typeof(RangedInstanceFunctionNodeRoot))]
+    [InitializedInstances(typeof(RangedInstanceFunctionNode))]
     private sealed partial class DIE_Scope_RangedInstanceFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_RangedInstanceFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 
             : base(parentRange, checkTypeProperties) { }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(RangedInstanceInterfaceFunctionNode))]
+    [CustomScopeForRootTypes(typeof(RangedInstanceInterfaceFunctionNodeRoot))]
+    [InitializedInstances(typeof(RangedInstanceInterfaceFunctionNode))]
     private sealed partial class DIE_Scope_RangedInstanceInterfaceFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_RangedInstanceInterfaceFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 
             : base(parentRange, checkTypeProperties) { }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(MultiFunctionNode))]
+    [CustomScopeForRootTypes(typeof(MultiFunctionNodeRoot))]
+    [InitializedInstances(typeof(MultiFunctionNode))]
     private sealed partial class DIE_Scope_MultiFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_MultiFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 
             : base(parentRange, checkTypeProperties) { }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(VoidFunctionNode))]
+    [CustomScopeForRootTypes(typeof(VoidFunctionNodeRoot))]
+    [InitializedInstances(typeof(VoidFunctionNode))]
     private sealed partial class DIE_Scope_VoidFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_VoidFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 
             : base(parentRange, checkTypeProperties) { }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(MultiKeyValueFunctionNode))]
+    [CustomScopeForRootTypes(typeof(MultiKeyValueFunctionNodeRoot))]
+    [InitializedInstances(typeof(MultiKeyValueFunctionNode))]
     private sealed partial class DIE_Scope_MultiKeyValueFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_MultiKeyValueFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 
             : base(parentRange, checkTypeProperties) { }
     }
 
+    [ImplementationChoice(typeof(IFunctionNode), typeof(MultiKeyValueMultiFunctionNode))]
+    [CustomScopeForRootTypes(typeof(MultiKeyValueMultiFunctionNodeRoot))]
+    [InitializedInstances(typeof(MultiKeyValueMultiFunctionNode))]
     private sealed partial class DIE_Scope_MultiKeyValueMultiFunctionNodeRoot : ScopeBase
     {
         internal DIE_Scope_MultiKeyValueMultiFunctionNodeRoot(IRangeNode parentRange, ICheckTypeProperties checkTypeProperties) 

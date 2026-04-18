@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis.CSharp;
+﻿using System.Collections.Concurrent;
+using Microsoft.CodeAnalysis.CSharp;
 using MsMeeseeks.DIE.Configuration;
 using MsMeeseeks.DIE.Extensions;
 using MsMeeseeks.DIE.Nodes.Elements;
@@ -20,31 +21,82 @@ internal interface ICodeGenerationVisitor : INodeVisitor
     string GenerateContainerFile();
     void VisitICreateFunctionNodeBase(ICreateFunctionNodeBase element);
     void VisitIElementNode(IElementNode elementNode);
+    CodeGenerationFunctionVisitor CreateNestedFunctionVisitor(
+        ReturnTypeStatus returnTypeStatus,
+        AsyncAwaitStatus asyncAwaitStatus);
 }
 
-internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
+internal sealed class CodeGenerationVisitor : CodeGenerationVisitorBase
 {
-    private readonly StringBuilder _code = new();
-    private readonly WellKnownTypes _wellKnownTypes;
-    private readonly WellKnownTypesCollections _wellKnownTypesCollections;
-
     internal CodeGenerationVisitor(
         WellKnownTypes wellKnownTypes,
-        WellKnownTypesCollections wellKnownTypesCollections)
+        WellKnownTypesCollections wellKnownTypesCollections,
+        Func<StringBuilder, ReturnTypeStatus, AsyncAwaitStatus, CodeGenerationFunctionVisitor> codeGenerationFunctionVisitorFactory)
+        : base(new(), ReturnTypeStatus.Ordinary, AsyncAwaitStatus.No, wellKnownTypes, wellKnownTypesCollections, codeGenerationFunctionVisitorFactory)
     {
+    }
+}
+
+internal sealed class CodeGenerationFunctionVisitor : CodeGenerationVisitorBase
+{
+    internal CodeGenerationFunctionVisitor(
+        // parameters
+        StringBuilder code,
+        ReturnTypeStatus returnTypeStatus,
+        AsyncAwaitStatus asyncAwaitStatus,
+        
+        // dependencies
+        WellKnownTypes wellKnownTypes,
+        WellKnownTypesCollections wellKnownTypesCollections,
+        Func<StringBuilder, ReturnTypeStatus, AsyncAwaitStatus, CodeGenerationFunctionVisitor> codeGenerationFunctionVisitorFactory)
+        : base(code, returnTypeStatus, asyncAwaitStatus, wellKnownTypes, wellKnownTypesCollections, codeGenerationFunctionVisitorFactory)
+    {
+    }
+}
+
+internal class CodeGenerationVisitorBase : ICodeGenerationVisitor
+{
+    private readonly StringBuilder _code;
+    private readonly WellKnownTypes _wellKnownTypes;
+    private readonly WellKnownTypesCollections _wellKnownTypesCollections;
+    private readonly Func<StringBuilder, ReturnTypeStatus, AsyncAwaitStatus, CodeGenerationFunctionVisitor> _codeGenerationFunctionVisitorFactory;
+    private readonly ReturnTypeStatus _returnTypeStatus;
+    private readonly AsyncAwaitStatus _asyncAwaitStatus;
+
+    internal CodeGenerationVisitorBase(
+        // parameters
+        StringBuilder code,
+        ReturnTypeStatus returnTypeStatus,
+        AsyncAwaitStatus asyncAwaitStatus,
+        
+        // dependencies
+        WellKnownTypes wellKnownTypes,
+        WellKnownTypesCollections wellKnownTypesCollections,
+        Func<StringBuilder, ReturnTypeStatus, AsyncAwaitStatus, CodeGenerationFunctionVisitor> codeGenerationFunctionVisitorFactory)
+    {
+        _code = code;
         _wellKnownTypes = wellKnownTypes;
         _wellKnownTypesCollections = wellKnownTypesCollections;
+        _codeGenerationFunctionVisitorFactory = codeGenerationFunctionVisitorFactory;
+        _returnTypeStatus = returnTypeStatus;
+        _asyncAwaitStatus = asyncAwaitStatus;
     }
+
+    private bool CurrentFunctionAsyncAwait =>
+        (_returnTypeStatus.HasFlag(ReturnTypeStatus.ValueTask) || _returnTypeStatus.HasFlag(ReturnTypeStatus.Task))
+        && _asyncAwaitStatus is AsyncAwaitStatus.Yes;
 
     public void VisitIContainerNode(IContainerNode container) => 
         container.GetGenerator().Generate(_code, this);
 
     public void VisitICreateContainerFunctionNode(ICreateContainerFunctionNode createContainerFunction)
     {
-        var asyncPrefix = createContainerFunction.InitializationAwaited
+        var isAsyncAwait = createContainerFunction.ReturnTypeStatus.HasFlag(ReturnTypeStatus.Task) || 
+                           createContainerFunction.ReturnTypeStatus.HasFlag(ReturnTypeStatus.ValueTask);
+        var asyncPrefix = isAsyncAwait
             ? "async "
             : "";
-        var awaitPrefix = createContainerFunction.InitializationAwaited
+        var awaitPrefix = isAsyncAwait
             ? "await "
             : "";
         
@@ -104,7 +156,7 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
     public void VisitIScopeCallNode(IScopeCallNode scopeCall)
     {
         VisitIElementNode(scopeCall.ScopeConstruction);
-        _code.AppendLine($"{scopeCall.SubDisposalReference}.{nameof(List<object>.Add)}({scopeCall.ScopeConstruction.Reference});");
+        _code.AppendLine($"{scopeCall.SubDisposalReference}.{nameof(ConcurrentStack<object>.Push)}({scopeCall.ScopeConstruction.Reference});");
         GenerateInitialization(scopeCall.Initialization, scopeCall.ScopeConstruction.Reference);
         VisitIFunctionCallNode(scopeCall);
     }
@@ -112,10 +164,8 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
     public void VisitITransientScopeCallNode(ITransientScopeCallNode transientScopeCall)
     {
         VisitIElementNode(transientScopeCall.ScopeConstruction);
-        var owner = transientScopeCall.ContainerReference is { } containerReference
-            ? $"{containerReference}."
-            : "";
-        _code.AppendLine($"{owner}{transientScopeCall.TransientScopeDisposalReference}.{nameof(List<object>.Add)}({transientScopeCall.ScopeConstruction.Reference});");
+        if (transientScopeCall.TransientScopeDisposalParameter?.Calling.Reference is {} reference)
+            _code.AppendLine($"{reference}.{nameof(List<object>.Add)}({transientScopeCall.ScopeConstruction.Reference});");
         GenerateInitialization(transientScopeCall.Initialization, transientScopeCall.ScopeConstruction.Reference);
         VisitIFunctionCallNode(transientScopeCall);
     }
@@ -129,12 +179,12 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
     {
         if (maybeInitialization is { } initialization)
         {
-            var asyncPrefix = initialization.Awaited
+            var asyncPrefix = CurrentFunctionAsyncAwait
                 ? "await "
                 : "";
 
             _code.AppendLine(
-                $"{asyncPrefix}{ownerReference}.{initialization.FunctionName}({string.Join(", ", initialization.Parameters.Select(p =>$"{p.Item1.Reference.PrefixAtIfKeyword()}: {p.Item2.Reference}"))});");
+                $"{asyncPrefix}{ownerReference}.{initialization.FunctionName(_returnTypeStatus)}({string.Join(", ", initialization.Parameters.Select(p =>$"{p.Item1.Reference.PrefixAtIfKeyword()}: {p.Item2.Reference}"))});");
         }
     }
 
@@ -178,7 +228,11 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
                 .AppendIf(
                     $"{rangedInstanceInterfaceFunctionNode.TransientScopeDisposalNode.TypeFullName} {rangedInstanceInterfaceFunctionNode.TransientScopeDisposalNode.Reference}",
                     rangedInstanceInterfaceFunctionNode.IsTransientScopeDisposalAsParameter));
-        _code.AppendLine($"{rangedInstanceInterfaceFunctionNode.ReturnedTypeFullName} {rangedInstanceInterfaceFunctionNode.Name}({parameter});");
+        var consideredStatuses = Enum.GetValues(typeof(ReturnTypeStatus))
+            .OfType<ReturnTypeStatus>()
+            .Where(r => rangedInstanceInterfaceFunctionNode.ReturnTypeStatus.HasFlag(r));
+        foreach (var status in consideredStatuses)
+            _code.AppendLine($"{rangedInstanceInterfaceFunctionNode.ReturnedTypeFullName(status)} {rangedInstanceInterfaceFunctionNode.Name(status)}({parameter});");
     }
 
     public void VisitIRangedInstanceFunctionGroupNode(IRangedInstanceFunctionGroupNode rangedInstanceFunctionGroupNode)
@@ -209,7 +263,7 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
     }
 
     public void VisitIInitialSubDisposalNode(IInitialSubDisposalNode element) => 
-        _code.AppendLine($"{element.TypeFullName} {element.Reference} = new {element.TypeFullName}({element.SubDisposalCount});");
+        _code.AppendLine($"{element.TypeFullName} {element.Reference} = new {element.TypeFullName}();");
 
     public void VisitIWrappedAsyncFunctionCallNode(IWrappedAsyncFunctionCallNode functionCallNode)
     {
@@ -227,19 +281,23 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
         var typeParameters = functionCallNode.TypeParameters.Any()
             ? $"<{string.Join(", ", functionCallNode.TypeParameters.Select(p => p.Name))}>"
             : "";
-        var call = $"{owner}{functionCallNode.FunctionName}{typeParameters}({parameters})";
+        string functionName;
+        if (functionCallNode.CalledFunction.ReturnTypeStatus.HasFlag(ReturnTypeStatus.ValueTask)) 
+            functionName = functionCallNode.FunctionName(ReturnTypeStatus.ValueTask);
+        else if (functionCallNode.CalledFunction.ReturnTypeStatus.HasFlag(ReturnTypeStatus.Task))
+            functionName = functionCallNode.FunctionName(ReturnTypeStatus.Task);
+        else
+            functionName = functionCallNode.FunctionName(ReturnTypeStatus.Ordinary);
+        var call = $"{owner}{functionName}{typeParameters}({parameters})";
         call = functionCallNode.Transformation switch
         {
-            AsyncFunctionCallTransformation.ValueTaskFromValueTask => $"new {typeFullName}({call})",
-            AsyncFunctionCallTransformation.ValueTaskFromForcedValueTask => call,
-            AsyncFunctionCallTransformation.ValueTaskFromTask => $"new {typeFullName}({call})",
-            AsyncFunctionCallTransformation.ValueTaskFromForcedTask => $"new {typeFullName}({call})",
-            AsyncFunctionCallTransformation.ValueTaskFromSync => $"new {typeFullName}({call})",
-            AsyncFunctionCallTransformation.TaskFromValueTask => $"{_wellKnownTypes.Task.FullName()}.FromResult({call})",
-            AsyncFunctionCallTransformation.TaskFromForcedValueTask => $"{call}.AsTask()",
-            AsyncFunctionCallTransformation.TaskFromTask => $"{_wellKnownTypes.Task.FullName()}.FromResult({call})",
-            AsyncFunctionCallTransformation.TaskFromForcedTask => call,
-            AsyncFunctionCallTransformation.TaskFromSync => $"{_wellKnownTypes.Task.FullName()}.FromResult({call})",
+            WrappedAsyncTransformation.SameSame => call,
+            WrappedAsyncTransformation.ValueTaskFromTask => $"new {typeFullName}({call})",
+            WrappedAsyncTransformation.ValueTaskFromSync => $"new {typeFullName}({_wellKnownTypes.Task.FullName()}.FromResult({call}))",
+            WrappedAsyncTransformation.ValueTaskDeeper => $"new {typeFullName}({call}.AsTask())",
+            WrappedAsyncTransformation.TaskFromValueTask => $"{call}.AsTask()",
+            WrappedAsyncTransformation.TaskFromSync => $"{_wellKnownTypes.Task.FullName()}.FromResult({call})",
+            WrappedAsyncTransformation.TaskDeeper => $"{_wellKnownTypes.Task.FullName()}.FromResult({call})",
             _ => throw new ArgumentOutOfRangeException(nameof(functionCallNode), $"Switch in DIE type {nameof(CodeGenerationVisitor)} is not exhaustive.")
         };
         _code.AppendLine($"{typeFullName} {functionCallNode.Reference} = ({typeFullName}){call};");
@@ -261,8 +319,15 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
         var typeParameters = functionCallNode.TypeParameters.Any()
             ? $"<{string.Join(", ", functionCallNode.TypeParameters.Select(p => p.Name))}>"
             : "";
-        var call = $"{owner}{functionCallNode.FunctionName}{typeParameters}({parameters})";
-        call = functionCallNode.Awaited ? $"(await {call})" : call;
+        var functionName = _returnTypeStatus.HasFlag(ReturnTypeStatus.Ordinary)
+            ? functionCallNode.FunctionName(ReturnTypeStatus.Ordinary)
+            : functionCallNode.CalledFunction.ReturnTypeStatus.HasFlag(ReturnTypeStatus.ValueTask) 
+                ? functionCallNode.FunctionName(ReturnTypeStatus.ValueTask)
+                : functionCallNode.FunctionName(ReturnTypeStatus.Task);
+        var call = $"{owner}{functionName}{typeParameters}({parameters})";
+        call = CurrentFunctionAsyncAwait && functionCallNode.CalledFunction is not IMultiFunctionNodeBase { IsAsyncEnumerable: true } 
+            ? $"(await {call})" 
+            : call;
         _code.AppendLine($"{typeFullName} {functionCallNode.Reference} = ({typeFullName}){call};");
     }
 
@@ -318,7 +383,7 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
         _code.AppendLine(
             $"{threadLocalNode.TypeFullName} {threadLocalNode.Reference} = new {threadLocalNode.TypeFullName}({threadLocalNode.MethodGroup}, false);");
         if (threadLocalNode.SubDisposalReference is {} subDisposalReference)
-            _code.AppendLine($"{subDisposalReference}.Add({threadLocalNode.Reference});");
+            _code.AppendLine($"{subDisposalReference}.{nameof(ConcurrentStack<object>.Push)}({threadLocalNode.Reference});");
     }
 
     public void VisitITupleNode(ITupleNode tupleNode)
@@ -431,6 +496,10 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
         }
     }
 
+    public CodeGenerationFunctionVisitor CreateNestedFunctionVisitor(ReturnTypeStatus returnTypeStatus,
+        AsyncAwaitStatus asyncAwaitStatus) =>
+        _codeGenerationFunctionVisitorFactory(_code, returnTypeStatus, asyncAwaitStatus);
+
     public void VisitIImplementationNode(IImplementationNode implementationNode)
     {
         if (implementationNode.UserDefinedInjectionConstructor is not null)
@@ -453,7 +522,7 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
             $"{implementationNode.TypeFullName} {implementationNode.Reference} = {cast}new {implementationNode.ConstructorCallName}({constructorParameters}){objectInitializerParameter};");
 
         if (implementationNode.AggregateForDisposal) 
-            _code.AppendLine($"{implementationNode.SubDisposalReference}.{nameof(List<object>.Add)}({implementationNode.Reference});");
+            _code.AppendLine($"{implementationNode.SubDisposalReference}.{nameof(ConcurrentStack<object>.Push)}({implementationNode.Reference});");
 
         if (implementationNode.Initializer is {} init)
         {
@@ -464,7 +533,7 @@ internal sealed class CodeGenerationVisitor : ICodeGenerationVisitor
             var initializerParameters =
                 string.Join(", ", init.Parameters.Select(d => $"{d.Name.PrefixAtIfKeyword()}: {d.Element.Reference}"));
 
-            var prefix = implementationNode.Awaited
+            var prefix = implementationNode.InitializerReturnsSomeTask
                 ? "await "
                 : implementationNode is { AsyncReference: { } asyncReference, AsyncTypeFullName: { } asyncTypeFullName }
                     ? $"{asyncTypeFullName} {asyncReference} = "

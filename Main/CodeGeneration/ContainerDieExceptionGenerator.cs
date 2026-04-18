@@ -41,12 +41,16 @@ internal sealed class ContainerDieExceptionGenerator : IContainerDieExceptionGen
             ? $"{_wellKnownTypes.IAsyncDisposable.FullName()}, "
             : "";
         
+        var genericParameters = _containerType.TypeParameters.Length == 0
+            ? ""
+            : $"<{string.Join(", ", _containerType.TypeParameters.Select(p => p.Name))}>";
+        
         var generatedContainer = new StringBuilder()
             .AppendLine($$"""
                 #nullable enable
                 namespace {{_containerType.ContainingNamespace.FullName()}}
                 {
-                partial class {{_containerType.Name}} : {{asyncDisposableBit}}{{_wellKnownTypes.IDisposable.FullName()}}
+                partial class {{_containerType.Name}}{{genericParameters}} : {{asyncDisposableBit}}{{_wellKnownTypes.IDisposable.FullName()}}
                 {
                 """);
         
@@ -61,6 +65,7 @@ internal sealed class ContainerDieExceptionGenerator : IContainerDieExceptionGen
 
         generatedContainer.AppendLine($$"""
             public {{listOfKinds.FullName()}} ExceptionKinds_0_0 { get; } = new {{listOfKinds.FullName()}}() { {{string.Join(", ", _diagLogger.ErrorKinds.Select(k => $"{_wellKnownTypesMiscellaneous.DieExceptionKind.FullName()}.{k.ToString()}"))}} };
+            public {{_wellKnownTypes.String.FullName()}}[] DieBuildErrorCodes { get; } = new {{_wellKnownTypes.String.FullName()}}[] { {{string.Join(", ", _diagLogger.DieBuildErrorCodes.Select(c => $"\"{c}\""))}} };
             public string ExceptionToString_0_1 => @"{{exception?.ToString() ?? "no exception"}}";
             public void Dispose(){}
             {{(_wellKnownTypes.ValueTask is not null ? $"public {_wellKnownTypes.ValueTask.FullName()} DisposeAsync() => new {_wellKnownTypes.ValueTask.FullName()}();" : "")}}
@@ -74,7 +79,6 @@ internal sealed class ContainerDieExceptionGenerator : IContainerDieExceptionGen
             .GetRoot()
             .NormalizeWhitespace()
             .SyntaxTree
-            .GetText();
-        _context.AddSource($"{_containerType.ContainingNamespace.FullName()}.{_containerType.Name}.g.cs", containerSource);
+            .GetText(); _context.AddSource($"{_containerType.ContainingNamespace.FullName()}.{_containerType.Name}.g.cs", containerSource);
     }
 }

@@ -16,6 +16,7 @@ namespace MsMeeseeks.DIE.Nodes.Ranges;
 internal interface IContainerNode : IRangeNode
 {
     string Namespace { get; }
+    IEnumerable<ITypeParameterSymbol> TypeParameters { get; }
     Queue<BuildJob> BuildQueue { get; }
     Queue<IFunctionNode> AsyncCheckQueue { get; }
     IReadOnlyList<IEntryFunctionNode> RootFunctions { get; }
@@ -24,8 +25,10 @@ internal interface IContainerNode : IRangeNode
     ITransientScopeInterfaceNode TransientScopeInterface { get; }
     string ScopeInterface { get; }
     string TransientScopeDisposalReference { get; }
+    string TransientScopeDisposalSemaphoreReference { get; }
     IFunctionCallNode BuildContainerInstanceCall(string? ownerReference, INamedTypeSymbol type, IFunctionNode callingFunction);
     IReadOnlyList<ICreateContainerFunctionNode> CreateContainerFunctions { get; }
+    bool AsyncDisposablesPossible { get; }
 
     void RegisterDelegateBaseNode(IDelegateBaseNode delegateBaseNode);
 }
@@ -36,6 +39,8 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
 {
     private readonly IContainerInfo _containerInfo;
     private readonly IFunctionCycleTracker _functionCycleTracker;
+    private readonly ITypeParameterUtility _typeParameterUtility;
+    private readonly ITaskBasedQueue _taskBasedQueue;
     private readonly ICurrentExecutionPhaseSetter _currentExecutionPhaseSetter;
     private readonly Lazy<ITransientScopeInterfaceNode> _lazyTransientScopeInterfaceNode;
     private readonly Func<ITypeSymbol, string, IReadOnlyList<ITypeSymbol>, IEntryFunctionNodeRoot> _entryFunctionNodeFactory;
@@ -47,6 +52,7 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
 
     public override string FullName { get; }
     public string Namespace { get; }
+    public IEnumerable<ITypeParameterSymbol> TypeParameters => _containerInfo.ContainerType.TypeParameters;
     public Queue<BuildJob> BuildQueue { get; } = new();
     public Queue<IFunctionNode> AsyncCheckQueue { get; } = new();
     public IReadOnlyList<IEntryFunctionNode> RootFunctions => _rootFunctions;
@@ -55,6 +61,7 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
     public ITransientScopeInterfaceNode TransientScopeInterface => _lazyTransientScopeInterfaceNode.Value;
     public string ScopeInterface { get; }
     public string TransientScopeDisposalReference { get; }
+    public string TransientScopeDisposalSemaphoreReference { get; }
 
     public IFunctionCallNode BuildContainerInstanceCall(
         string? ownerReference, 
@@ -63,6 +70,13 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         BuildRangedInstanceCall(ownerReference, type, callingFunction, ScopeLevel.Container);
 
     public IReadOnlyList<ICreateContainerFunctionNode> CreateContainerFunctions { get; private set; } = null!;
+
+    public bool AsyncDisposablesPossible =>
+        TransientScopes
+            .Concat<IRangeNode>(Scopes)
+            .Prepend(this)
+            .Any(r => r.DisposalHandling.HasAsyncDisposables);
+    
     public override bool GenerateEmptyConstructor { get; }
 
     public void RegisterDelegateBaseNode(IDelegateBaseNode delegateBaseNode) => 
@@ -77,6 +91,7 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         ITypeParameterUtility typeParameterUtility,
         IRangeUtility rangeUtility,
         ICheckTypeProperties checkTypeProperties,
+        ITaskBasedQueue taskBasedQueue,
         WellKnownTypes wellKnownTypes,
         WellKnownTypesMiscellaneous wellKnownTypesMiscellaneous,
         ICurrentExecutionPhaseSetter currentExecutionPhaseSetter,
@@ -115,6 +130,8 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
     {
         _containerInfo = containerInfo;
         _functionCycleTracker = functionCycleTracker;
+        _typeParameterUtility = typeParameterUtility;
+        _taskBasedQueue = taskBasedQueue;
         _currentExecutionPhaseSetter = currentExecutionPhaseSetter;
         _lazyTransientScopeInterfaceNode = lazyTransientScopeInterfaceNode;
         _entryFunctionNodeFactory = entryFunctionNodeFactory;
@@ -126,6 +143,8 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         _containerNodeGenerator = containerNodeGenerator;
 
         TransientScopeDisposalReference = referenceGenerator.Generate("transientScopeDisposal");
+
+        TransientScopeDisposalSemaphoreReference = referenceGenerator.Generate("transientScopeDisposalLock");
         
         GenerateEmptyConstructor = !_containerInfo.ContainerType.InstanceConstructors.Any(ic => !ic.IsImplicitlyDeclared);
         
@@ -142,7 +161,7 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         var initializedInstancesFunction = InitializedInstances.Any()
             ? VoidFunctionNodeFactory(
                     InitializedInstances.ToList(),
-                    Array.Empty<ITypeSymbol>())
+                    [])
                 .Function
                 .EnqueueBuildJobTo(ParentContainer.BuildQueue, new(ImmutableStack<INamedTypeSymbol>.Empty, null))
             : null;
@@ -164,30 +183,33 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         base.Build(passedContext);
         foreach (var (typeSymbol, methodNamePrefix, parameterTypes) in _containerInfo.CreateFunctionData)
         {
+            var actualType = _typeParameterUtility.EquipWithMappedTypeParameters(typeSymbol);
+            var customizedType = TypeParameterUtility.ReplaceTypeParametersByCustom(actualType.OriginalDefinitionIfUnbound());
             var functionNode = _entryFunctionNodeFactory(
-                TypeParameterUtility.ReplaceTypeParametersByCustom(typeSymbol.OriginalDefinitionIfUnbound()),
-                methodNamePrefix,
-                parameterTypes)
-                .Function;
+                    customizedType, 
+                    methodNamePrefix, 
+                    parameterTypes).Function;
             _rootFunctions.Add(functionNode);
             BuildQueue.Enqueue(new(functionNode, passedContext));
         }
 
         var asyncCallNodes = new List<IWrappedAsyncFunctionCallNode>();
+        var potentialTaskBasedEntryFunctions = new List<IFunctionNode>();
         while (BuildQueue.Count != 0 && BuildQueue.Dequeue() is { } buildJob)
         {
             buildJob.Node.Build(buildJob.PassedContext);
             if (buildJob.Node is IWrappedAsyncFunctionCallNode call)
                 asyncCallNodes.Add(call);
+            if (buildJob.Node is IFunctionNode function and (IEntryFunctionNode or ILocalFunctionNode))
+                potentialTaskBasedEntryFunctions.Add(function);
         }
 
         _currentExecutionPhaseSetter.Value = ExecutionPhase.ResolutionValidation;
         
-        while (AsyncCheckQueue.Count != 0 && AsyncCheckQueue.Dequeue() is { } function)
-            function.CheckSynchronicity();
+        _taskBasedQueue.Process();
         
         foreach (var call in asyncCallNodes)
-            call.AdjustToCurrentCalledFunctionSynchronicity();
+            call.AdjustToCurrentCalledFunction();
         
         AdjustRangedInstancesIfGeneric();
         foreach (var scope in Scopes)
@@ -205,6 +227,13 @@ internal sealed partial class ContainerNode : RangeNode, IContainerNode, IContai
         
         foreach (var delegateBaseNode in _delegateBaseNodes)
             delegateBaseNode.CheckSynchronicity();
+
+        foreach (var potentialTaskBasedEntryFunction in potentialTaskBasedEntryFunctions)
+        {
+            var returnTypeStatus = potentialTaskBasedEntryFunction.ReturnTypeStatus;
+            if (returnTypeStatus.HasFlag(ReturnTypeStatus.Task) || returnTypeStatus.HasFlag(ReturnTypeStatus.ValueTask))
+                potentialTaskBasedEntryFunction.MakeTaskBasedToo();
+        }
     }
 
     public override string? ContainerReference => null;
