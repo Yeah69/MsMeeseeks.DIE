@@ -8,8 +8,6 @@
     <PackageId>$(AssemblyName)</PackageId>
     <Product>$(AssemblyName)</Product>
 
-    <IncludeBuildOutput>false</IncludeBuildOutput>
-    <IncludeSymbols>false</IncludeSymbols>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
@@ -27,8 +25,6 @@
     <Compile Remove="Generator\**" />
     <EmbeddedResource Remove="Generator\**" />
     <None Remove="Generator\**" />
-    <Compile Remove="Logging\ContainerLevelLogMessageEnhancer.cs" />
-    <Compile Remove="Logging\RangeLevelLogMessageEnhancer.cs" />
   </ItemGroup>
 
   <ItemGroup>
